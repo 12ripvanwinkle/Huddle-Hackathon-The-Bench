@@ -1,20 +1,20 @@
 import React from 'react';
 import {View, Text, StyleSheet,ScrollView,Button} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-// import MapView from 'react-native-maps';
+import MapView from 'react-native-maps';
 
 import {haversineDistance} from '../services/locationService';
 
 //Functions
 
 function distfromCenter(userCoords, huddleCircle) {
-    return haversineDistance(huddleCircle.center,)
+   return haversineDistance(huddleCircle.center,)
 }
 function isOutsidaASWE3(user) {}
 
 // Provider is Leaflet
 const MapScreen = () => {
-  const navigation = useNavigation(); 
+  // const navigation = useNavigation(); 
     return (
         <View style={styles.container}>
             <Text>Some text</Text>
@@ -29,5 +29,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'white',
     padding: 16,
-  },
-});
+  },});
+  
+
+export default MapScreen

@@ -1,7 +1,7 @@
 {
   "name": "huddle",
   "version": "1.0.0",
-  "main": "App.js",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -31,6 +31,9 @@
     "react-native-screens": "^4.23.0",
     "react-native-slider": "^0.11.0",
     "react-native-webview": "13.16.0"
+  },
+  "expo": {
+    "entryPoint": "./index.js"
   },
   "private": true
 }

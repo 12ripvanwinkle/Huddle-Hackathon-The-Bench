@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   Alert, ActivityIndicator, StyleSheet

@@ -1,25 +1,27 @@
 import React from "react";
-import { View, Text, Textinput, StyleSheet, Button} from "react-native";
+import { View, Text, TextInput, StyleSheet, Button} from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 const AuthScreen = () => {
   return (
-    <View>
-      <Text>App Name</Text>
-      <Text>Welcome Back</Text>
-      <Textinput placeholder="Email" />
-      <Textinput placeholder="Password"></Textinput>
-      <Button 
-        title="Login"
-        onPress={()=> showAlert("Login Pressed")}
+    <SafeAreaProvider>
+      <View>
+        <Text>App Name</Text>
+        <Text>Welcome Back</Text>
+        <TextInput placeholder="Email" />
+        <TextInput placeholder="Password" />
+        <Button 
+          title="Login"
+          onPress={()=> showAlert("Login Pressed")}
         />
         <Text>Don't have an account? </Text>
         <Button 
-        title="Sign Up"
-        onPress={()=> showAlert("Sign Up Pressed")}
-         />
-
-    </View>
-  );
+          title="Sign Up"
+          onPress={()=> showAlert("Sign Up Pressed")}
+        />
+      </View>
+    </SafeAreaProvider>
+  );        
 };
 
 export default AuthScreen;

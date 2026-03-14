@@ -1,34 +1,28 @@
-// FRONTEND: React & React Native imports used to build the mobile UI
 import React, { useEffect, useState } from 'react';
 
-// FRONTEND: Navigation libraries used to move between screens in the app
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 
-// FRONTEND: UI components used to build the interface
 import { Text, TouchableOpacity, Platform, View, ActivityIndicator } from 'react-native';
 
-// FRONTEND: Expo UI utilities
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 
-// BACKEND CONNECTION: Supabase client
-// Supabase acts as the backend for authentication and possibly storing GPS data
+
 import { supabase } from './services/supabase';
 
-// FRONTEND SCREENS (UI pages)
 import MapScreen from './screens/MapScreen';     // Screen that displays the GPS map
 import FriendsScreen from './screens/FriendsScreen'; // Screen showing friends/group members
 import AuthScreen from './screens/AuthScreen';   // Login / signup screen
 
 
-// FRONTEND NAVIGATION SETUP
 const Tab = createBottomTabNavigator();   // Bottom navigation tabs
 const Stack = createStackNavigator();     // Stack navigation for auth vs main app
 
-// FRONTEND DESIGN CONSTANT
-const PURPLE = '#534AB7';
+// Theme colors
+const PURPLE = '#6B21A8';
+
 
 
 
@@ -65,7 +59,6 @@ function MainTabs({ session }) {
                 tabBarActiveTintColor: PURPLE,
                 tabBarInactiveTintColor: '#999',
 
-                // FRONTEND: styling for bottom navigation
                 tabBarStyle: {
                     height: 60,
                     paddingBottom: 8,
@@ -83,11 +76,11 @@ function MainTabs({ session }) {
             {/* This tap this and the screen would display the live GPS tracking map */}
             <Tab.Screen
                 name="Map"
+                component={MapScreen}
                 options={{
                     tabBarIcon: ({ color }) => <Text style={{fontSize: 20, color}}>🗺️</Text>,
                 }}
-            >
-            </Tab.Screen>
+            />
 
 
             {/* FRONTEND: Friends tab */}

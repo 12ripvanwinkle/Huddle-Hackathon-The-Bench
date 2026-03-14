@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, Animated, Share, ScrollView
+  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { supabase } from '../services/supabase';
 import {
   watchAndBroadcastLocation,
@@ -21,6 +20,19 @@ import {
   formatDistance
 } from '../services/huddleService';
 import RadiusSlider from '../components/RadiusSlider';
+
+// These must come AFTER all imports
+let MapView, Circle, Marker;
+if (Platform.OS !== 'web') {
+  const Maps = require('react-native-maps');
+  MapView = Maps.default;
+  Circle = Maps.Circle;
+  Marker = Maps.Marker;
+}
+
+const WebMap = Platform.OS === 'web'
+  ? require('../components/WebMap').default
+  : null;
 
 const PURPLE = '#534AB7';
 const RED = '#E24B4A';
@@ -48,7 +60,6 @@ export default function MapScreen({ session }) {
   const bannerOpacity                               = useRef(new Animated.Value(0)).current;
   const locationSubscription                        = useRef(null);
   const realtimeSubscription                        = useRef(null);
-  const webViewRef                                  = useRef(null);
   const prevAlertCount                              = useRef(0);
 
   // Get current user profile
@@ -385,19 +396,6 @@ export default function MapScreen({ session }) {
     `;
   };
 
-  // Rebuild map when members update
-  useEffect(() => {
-    if (userLocation && webViewRef.current) {
-      const html = buildMapHTML(userLocation.latitude, userLocation.longitude);
-      webViewRef.current.injectJavaScript(`
-        document.open();
-        document.write(${JSON.stringify(html)});
-        document.close();
-        true;
-      `);
-    }
-  }, [members, radius]);
-
   // ── Active members count ─────────────────────────────────
 
   const activeMembers = members.filter(m => m.status !== 'left');
@@ -410,15 +408,54 @@ export default function MapScreen({ session }) {
 
       {/* Map */}
       {userLocation ? (
-        <WebView
-          ref={webViewRef}
-          style={styles.map}
-          source={{ html: buildMapHTML(userLocation.latitude, userLocation.longitude) }}
-          originWhitelist={['*']}
-          javaScriptEnabled
-          domStorageEnabled
-          scrollEnabled={false}
-        />
+        Platform.OS === 'web' ? (
+          <div style={{ flex: 1, width: '100%', height: '100%' }}>
+            <WebMap
+              userLocation={userLocation}
+              members={members}
+              radius={radius}
+              huddleActive={huddleActive}
+              userId={userId}
+            />
+          </div>
+        ) : (
+          <MapView
+            style={styles.map}
+            initialRegion={{
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }}
+            showsUserLocation
+            showsMyLocationButton
+          >
+            {huddleActive && (
+              <Circle
+                center={{
+                  latitude: userLocation.latitude,
+                  longitude: userLocation.longitude,
+                }}
+                radius={radius}
+                fillColor="rgba(83, 74, 183, 0.12)"
+                strokeColor="rgba(83, 74, 183, 0.6)"
+                strokeWidth={2}
+              />
+            )}
+            {huddleActive && members
+              .filter(m => m.latitude && m.longitude && m.user_id !== userId)
+              .map(m => (
+                <Marker
+                  key={m.user_id}
+                  coordinate={{ latitude: m.latitude, longitude: m.longitude }}
+                  title={m.profiles?.username || m.username || 'Member'}
+                  description={m.status === 'alert' ? '⚠️ Outside zone' : '✅ In zone'}
+                  pinColor={m.status === 'alert' ? '#E24B4A' : '#534AB7'}
+                />
+              ))
+            }
+          </MapView>
+        )
       ) : (
         <View style={styles.loadingMap}>
           <Text style={styles.loadingText}>📍 Getting your location...</Text>

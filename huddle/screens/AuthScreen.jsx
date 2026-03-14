@@ -1,100 +1,149 @@
-import { useState, useEffect } from "react"
-import { View, ScrollView, Text, Alert, TouchableOpacity, TextInput} from "react-native"
-import { supabase } from "../services/supabase"
-import { Session } from "@supabase/supabase-js"
-import { useRouter } from "expo-router"
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity,
+  Alert, ActivityIndicator, StyleSheet
+} from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { supabase } from '../services/supabase';
 
-const Auth = () =>{
-    const Router = useRouter()
-    const [loading, setLoading] = useState(false);
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+const PURPLE = '#534AB7';
 
-    const Login = async () => {
-        try{
-            setLoading(true);
-            if(!email || !password) 
-                throw new error("Fill All Fields Required")
+const AuthScreen = () => {
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-            const { data: { session }, error} = await supabase.auth.signInWithPassword({
-                email: email,
-                password:password,
-            });
-            if (error) throw error
-            console.log(error)
+  const Login = async () => {
+    try {
+      setLoading(true);
+      if (!email || !password)
+        throw new Error('Please fill in all fields.');
 
-            if(session){
-                Router.push("/home")
-            }
-            
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+      if (error) throw error;
 
-        } catch(error){
-            if(error instanceof Error){
-                Alert.alert(error.message)
-            }    
-            } finally{
-                setLoading(false)
-            }
+      // No manual navigation needed
+      // App.js onAuthStateChange handles it automatically
+
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Login failed', error.message);
+      }
+    } finally {
+      setLoading(false);
     }
-    const Register = async () => {
-        try{
-            setLoading(true);
-            if(!email || !password) 
-                throw new Error("Fill All Fields Required")
+  };
 
-            const { data: { session }, error} = await supabase.auth.signUp({
-                email: email,
-                password:password,
-            });
-            if (error) throw error
-            console.log(error)
+  const Register = async () => {
+    try {
+      setLoading(true);
+      if (!email || !password)
+        throw new Error('Please fill in all fields.');
 
-            if(session){
-                Router.push("/home")
-            }
-            
+      const { error } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+      });
+      if (error) throw error;
 
-        } catch(error){
-            if(error instanceof Error);
-            Alert.alert(error.message)
-            } finally{
-                setLoading(false)
-            }
+      Alert.alert('Account created! 🎉', 'You can now sign in.');
+
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Sign up failed', error.message);
+      }
+    } finally {
+      setLoading(false);
     }
-    
-    return (
+  };
+
+  return (
     <SafeAreaProvider>
-      <View>
-        <Text>App Name</Text>
-        <Text>Welcome Back</Text>
+      <View style={styles.container}>
+        <Text style={styles.title}>Huddle 🤝</Text>
+        <Text style={styles.subtitle}>Welcome Back</Text>
+
         <TextInput
-        label = "Email"
-        placeholder="Email" 
-        onChangeText = {(text) => setEmail(text)}
+          style={styles.input}
+          placeholder="Email"
+          onChangeText={(text) => setEmail(text)}
+          value={email}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
+
         <TextInput
-        label = "Password"
-        placeholder="Password"
-        onChangeText = {(text) => setPassword(text)}
+          style={styles.input}
+          placeholder="Password"
+          onChangeText={(text) => setPassword(text)}
+          value={password}
+          secureTextEntry
         />
-        <Button 
-          title="Login"
-          onPress={()=> Login()}
-        />
-        <Text>Don't have an account? </Text>
-        <Button 
-          title="Sign Up"
-          onPress={()=> Register()}
-        />
+
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={() => Login()}
+          disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator color="white" />
+            : <Text style={styles.primaryBtnText}>Sign In</Text>
+          }
+        </TouchableOpacity>
+
+        <Text style={styles.orText}>Don't have an account?</Text>
+
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={() => Register()}
+          disabled={loading}
+        >
+          <Text style={styles.secondaryBtnText}>Sign Up</Text>
+        </TouchableOpacity>
+
       </View>
     </SafeAreaProvider>
-  );      
-  
-  styles = StyleSheet.create({
-    container: {},
+  );
+};
 
-  })
+export default AuthScreen;
 
-}
-
-
+const styles = StyleSheet.create({
+  container: {
+    flex: 1, justifyContent: 'center',
+    padding: 24, backgroundColor: PURPLE,
+  },
+  title: {
+    fontSize: 32, fontWeight: '700',
+    color: 'white', textAlign: 'center', marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16, color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center', marginBottom: 32,
+  },
+  input: {
+    backgroundColor: 'white', borderRadius: 10,
+    padding: 12, fontSize: 15, marginBottom: 16, color: '#222',
+  },
+  primaryBtn: {
+    backgroundColor: 'white', borderRadius: 12,
+    padding: 14, alignItems: 'center', marginBottom: 12,
+  },
+  primaryBtnText: {
+    color: PURPLE, fontWeight: '600', fontSize: 15,
+  },
+  orText: {
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center', marginBottom: 12,
+  },
+  secondaryBtn: {
+    borderWidth: 1, borderColor: 'white',
+    borderRadius: 12, padding: 14, alignItems: 'center',
+  },
+  secondaryBtnText: {
+    color: 'white', fontWeight: '600', fontSize: 15,
+  },
+});

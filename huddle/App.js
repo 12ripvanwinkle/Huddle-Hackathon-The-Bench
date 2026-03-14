@@ -87,6 +87,7 @@ function MainTabs({ session }) {
                     tabBarIcon: ({ color }) => <Text style={{fontSize: 20, color}}>🗺️</Text>,
                 }}
             >
+                {() => <MapScreen session={session} />}
             </Tab.Screen>
 
 

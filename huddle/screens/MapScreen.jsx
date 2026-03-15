@@ -130,7 +130,27 @@ export default function MapScreen({ session }) {
     realtimeSubscription.current = sub;
     return () => sub.unsubscribe();
   }, [huddleActive, currentSession]);
+  
+  // ── DEEP LINK HANDLER ──
+  
+  useEffect(() => {
+  const handleUrl = (url) => {
+    if (!url || !url.includes('/join/')) return; // ← guard clause
+    const code = url.split('/join/').pop();
+    if (!code || code.length < 4) return;        // ← validate code exists
+    setJoinCodeInput(code);
+    setShowJoinModal(true);
+  };
 
+  const getInitialLink = async () => {
+    const initialUrl = await Linking.getInitialURL();
+    if (initialUrl) handleUrl(initialUrl); // handleUrl now guards internally
+  };
+  getInitialLink();
+
+  const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
+  return () => subscription.remove();
+}, []);
   const loadMembers = async () => {
     if (!currentSession) return;
     try {
@@ -413,9 +433,6 @@ export default function MapScreen({ session }) {
             </View>
             <TouchableOpacity style={styles.gearBtn} onPress={() => setShowSessionModal(true)}>
               <Text style={styles.gearIcon}>⚙️</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.gearBtn} onPress={loadMembers}>
-              <Text style={styles.gearIcon}>🔄</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -1,26 +1,161 @@
-import React from "react";
-import { View, Text, StyleSheet, Image, Button, TouchableOpacity, Alert } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Modal, Image, Button, TouchableOpacity, Alert, Pressable, ScrollView } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as ImagePicker from 'expo-image-picker';
+import ProfileCard from './ProfileCard';
+import Card from '../screens/Card';
 //import { supabase } from "../services/supabase";
+// const friend = {
+//     id: 1,
+//     name: 'John Doe',
+//     description: 'Invited you to join the group "Hiking Buddies"',
+//     imageUrl: 'https://randomuser.me/api/portraits/men}/1.jpg',}
+// const invitations = () => {
+//     return(
+//         <Modal>
+//             <View style={styles.centeredView}>
+//                 <View style={styles.modalView}>
+//                     <ScrollView>
+//                          <Card 
+//                                 key={friend.id}
+//                                 name={friend.name} 
+//                                 description={friend.description} 
+//                                 imageUrl={friend.imageUrl} 
+//                                 onButtonPress={() => handleCardAction(friend.id)} 
+//                             />
+//                     </ScrollView>
+//                     <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
+//                 </View>
+//             </View>
+//         </Modal>
+//     )
+// }
+
 
 const ProfileScreen = () => {
+
+    const [modalVisible, setModalVisible] = useState(false);
+    const [profileImage, setProfileImage] = useState('https://ui-avatars.com/api/?name=User&background=fb7854&color=fff');
+
+    const pickImage = async () => {
+        try {
+            console.log('Starting image picker...');
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            console.log('Permission status:', status);
+            
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'We need permission to access your photos');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 1,
+            });
+
+            console.log('Image picker result:', result);
+
+            if (!result.canceled) {
+                setProfileImage(result.assets[0].uri);
+                Alert.alert('Success', 'Profile picture updated!');
+                // TODO: Upload to Supabase and update user profile
+            }
+        } catch (error) {
+            console.error('Image picker error:', error);
+            // Fallback for emulator - allow entering image URL
+            Alert.alert(
+                'Image Picker Not Available',
+                'On emulator, enter an image URL instead',
+                [
+                    {
+                        text: 'Enter URL',
+                        onPress: () => promptImageUrl()
+                    },
+                    { text: 'Cancel' }
+                ]
+            );
+        }
+    };
+
+    const promptImageUrl = () => {
+        Alert.prompt(
+            'Enter Image URL',
+            'Paste an image URL:',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Set',
+                    onPress: (url) => {
+                        if (url) {
+                            setProfileImage(url);
+                            Alert.alert('Success', 'Profile picture updated!');
+                        }
+                    }
+                }
+            ],
+            'plain-text'
+        );
+    };
     return (
         <SafeAreaProvider>
             <View style={styles.ScreenBack}>
-                <View style={styles.topContent}>
-                    <Image source={{uri: 'https://ui-avatars.com/api/?name=User&background=fb7854&color=fff'}} style={styles.logoImage}/>
-                    <View style={styles.textContainer}>
-                        <Text style={styles.titleText}>Profile Screen</Text>
-                        <Text style={styles.nameText}>User Name</Text>
-                        <Text style={styles.nameText}>User Email</Text>
+                <ScrollView contentContainerStyle={styles.scrollContent}>
+                    <View style={styles.topContent}>
+                        <Pressable 
+                            onPress={() => {
+                                console.log('Image pressed');
+                                pickImage();
+                            }}
+                            style={({ pressed }) => [
+                                styles.imageWrapper,
+                                pressed && { opacity: 0.7 }
+                            ]}
+                        >
+                            <Image source={{uri: profileImage}} style={styles.logoImage}/>
+                            <Text style={styles.editText}>Tap to change</Text>
+                        </Pressable>
+                        <View style={styles.textContainer}>
+                            <Text style={styles.titleText}>User Name</Text>
+                        </View>
                     </View>
-                </View>
 
-                <View style={styles.spacer} />
+                    <View style={styles.infoSection}>
+                        <ProfileCard icon="📧" label="Email" value="user@example.com" />
+                        <ProfileCard icon="📱" label="Phone" value="+1 (555) 123-4567" />
+                    </View>
+
+                    <View> 
+                        <Button 
+                        title="Invitations" 
+                        onPress={() => setModalVisible(true)} 
+                        color="#fb7854" />
+                    </View>
+
+                    <View style={styles.spacer} />
+                </ScrollView>
 
                 <TouchableOpacity style={styles.logoutButton} onPress={() => Alert.alert('Sign Out')}>
                     <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
+
+                <Modal visible={modalVisible}>
+                    <View style={styles.centeredView}>
+                    <View style={styles.modalView}>
+                        <ScrollView>
+                         {/* <Card 
+                                key={friend.id}
+                                name={friend.name} 
+                                description={friend.description} 
+                                imageUrl={friend.imageUrl} 
+                                onButtonPress={() => handleCardAction(friend.id)} 
+                            /> */}
+                        </ScrollView>
+                        <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
+                    </View>
+                    </View>
+                </Modal>
             </View>
         </SafeAreaProvider>
     );
@@ -33,16 +168,22 @@ const styles = StyleSheet.create({
             flexDirection: 'column',
         },
 
+        scrollContent: {
+            flexGrow: 1,
+        },
+
         topContent: {
-            flexDirection: 'row',
             alignItems: 'center',
-            padding: 16,
-            marginTop: 40,
+            paddingTop: 20,
+        },
+
+        infoSection: {
+            marginTop: 20,
+            marginBottom: 20,
         },
 
         textContainer: {
-            marginLeft: 16,
-            flex: 1,
+            marginTop: 12,
         },
 
         spacer: {
@@ -53,12 +194,24 @@ const styles = StyleSheet.create({
             fontSize: 24,
             fontWeight: 'bold',
             color: 'white',
+            textAlign: 'center',
         },
 
         nameText: {
             fontSize: 18,
             color: 'white',
             marginTop: 8,
+        },
+
+        imageWrapper: {
+            alignItems: 'center',
+        },
+
+        editText: {
+            color: 'white',
+            fontSize: 12,
+            marginTop: 8,
+            fontStyle: 'italic',
         },
 
         logoImage:{

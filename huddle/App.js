@@ -90,26 +90,7 @@ function MainTabs({ session }) {
       <Tab.Screen
         name="Friends"
         component={FriendsScreen}
-        options={{
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text>,
-          headerShown: true,
-          headerTitle: 'Group Members',
-          headerStyle: { backgroundColor: PURPLE, elevation: 0, shadowOpacity: 0 },
-          headerTintColor: 'white',
-          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
-          headerLeft: ({ canGoBack, navigation }) =>
-            canGoBack ? <BackButton onPress={() => navigation.goBack()} /> : null,
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => supabase.auth.signOut()}
-              style={{ marginRight: 16 }}
-            >
-              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
-                Sign out
-              </Text>
-            </TouchableOpacity>
-          ),
-        }}
+        
       />
 
       <Tab.Screen

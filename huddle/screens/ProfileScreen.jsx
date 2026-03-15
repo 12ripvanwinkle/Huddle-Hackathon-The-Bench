@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState }, { useState } from "react";
 import { View, Text, StyleSheet, Modal, Image, Button, TouchableOpacity, Alert, Pressable, ScrollView } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
@@ -33,6 +33,21 @@ import Card from '../screens/Card';
 
 
 const ProfileScreen = () => {
+    const [username, setUsername] = useState("")
+    const [email, setEmail] = useState("")
+    const [avatar_initials, setAvatar_Initials] = useState("")
+    const profile = async () => {
+        const{data: { userData }} = await supabase.auth.getUsers();
+        const {data, error}= await supabase
+            .from('profiles')
+            .select('username,email,avatar_initials')
+        if(error) throw new Error("No Datat Retrieved")
+        if (data){
+            setUsername(data.username)
+            setEmail(data.email)
+            setAvatar_Initials(data.avatar_initials)
+        }
+    }
 
     const [modalVisible, setModalVisible] = useState(false);
     const [profileImage, setProfileImage] = useState('https://ui-avatars.com/api/?name=User&background=fb7854&color=fff');

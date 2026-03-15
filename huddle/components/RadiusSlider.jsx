@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 
-const PURPLE = '#534AB7';
+const PURPLE = '#fb7854';
 const RADIUS_OPTIONS = [0, 50, 100, 150, 300, 500];
 
 export default function RadiusSlider({ radius, onChange, disabled = false }) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const PURPLE = '#534AB7';
+const PURPLE = '#fb7854';
 const RED = '#E24B4A';
 
 export default function WebMap({ 

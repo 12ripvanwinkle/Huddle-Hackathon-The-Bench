@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-const PURPLE = '#534AB7';
+const PURPLE = '#fb7854';
 const RED = '#E24B4A';
 const GREEN = '#1D9E75';
 const GRAY = '#AAAAAA';

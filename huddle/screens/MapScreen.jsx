@@ -36,7 +36,7 @@ const WebMap = Platform.OS === 'web'
   ? require('../components/WebMap').default
   : null;
 
-const PURPLE = '#534AB7';
+const PURPLE = '#fb7854';
 const RED = '#E24B4A';
 const BLUE_INFO = '#1A73E8';
 const BANNER_ALERT = 'alert';
@@ -526,8 +526,8 @@ export default function MapScreen({ session }) {
               <Circle
                 center={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
                 radius={radius}
-                fillColor="rgba(83,74,183,0.12)"
-                strokeColor="rgba(83,74,183,0.6)"
+                fillColor="rgba(251,120,84,0.12)"
+                strokeColor="rgba(251,120,84,0.6)"
                 strokeWidth={2}
               />
             )}
@@ -540,8 +540,8 @@ export default function MapScreen({ session }) {
                   longitude: activePrevCenter.longitude,
                 }}
                 radius={previewRadius}
-                fillColor="rgba(83,74,183,0.15)"
-                strokeColor="#534AB7"
+                fillColor="rgba(251,120,84,0.15)"
+                strokeColor={PURPLE}
                 strokeWidth={2}
               />
             )}
@@ -940,7 +940,7 @@ const styles = StyleSheet.create({
   hostBadge:   { fontSize: 11, color: '#888', marginTop: 2 },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   inviteChip:  {
-    backgroundColor: '#EEEDFE',
+    backgroundColor: '#FFF1EC',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -965,22 +965,22 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   codeChip: {
     flex: 1,
-    backgroundColor: '#F5F4FF',
+    backgroundColor: '#FFF7F4',
     borderRadius: 8,
     padding: 8,
     alignItems: 'center',
     borderWidth: 0.5,
-    borderColor: '#AFA9EC',
+    borderColor: '#F6B19C',
   },
   codeText: { color: PURPLE, fontSize: 13, fontWeight: '500' },
   membersChip: {
     flex: 1,
-    backgroundColor: '#F5F4FF',
+    backgroundColor: '#FFF7F4',
     borderRadius: 8,
     padding: 8,
     alignItems: 'center',
     borderWidth: 0.5,
-    borderColor: '#AFA9EC',
+    borderColor: '#F6B19C',
   },
   membersText:   { color: PURPLE, fontSize: 13, fontWeight: '500' },
   inviteBtn:     { backgroundColor: PURPLE, borderRadius: 10, padding: 12, alignItems: 'center' },
@@ -1042,7 +1042,7 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: '#EBEBEB',
   },
-  friendRowSelected: { borderColor: PURPLE, backgroundColor: '#F5F4FF' },
+  friendRowSelected: { borderColor: PURPLE, backgroundColor: '#FFF7F4' },
   friendAvatar: {
     width: 38, height: 38,
     borderRadius: 19,
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F9F9',
     alignItems: 'center',
   },
-  locationOptionActive:    { backgroundColor: '#EEEDFE', borderColor: PURPLE },
+  locationOptionActive:    { backgroundColor: '#FFF1EC', borderColor: PURPLE },
   locationOptionText:      { fontSize: 12, color: '#666' },
   locationOptionTextActive: { color: PURPLE, fontWeight: '600' },
   addressRow: {
@@ -1162,19 +1162,19 @@ const styles = StyleSheet.create({
 
   // ── Hints & preview ──────────────────────────────────────
   dragHint: {
-    backgroundColor: '#EEEDFE',
+    backgroundColor: '#FFF1EC',
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
   },
   dragHintText: { color: PURPLE, fontSize: 12, textAlign: 'center' },
   previewInfo: {
-    backgroundColor: '#F5F4FF',
+    backgroundColor: '#FFF7F4',
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
     borderWidth: 0.5,
-    borderColor: '#AFA9EC',
+    borderColor: '#F6B19C',
   },
   previewInfoText: { color: PURPLE, fontSize: 12, textAlign: 'center' },
 

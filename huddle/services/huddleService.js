@@ -82,10 +82,20 @@ export const endSession = async (sessionId) => {
   if (error) throw error;
 };
 
-export const subscribeToSession = (sessionId, onUpdate) => {
-  return supabase
-    .channel(`session:${sessionId}`)
-    .on(
+export const updateSessionRadius = async (sessionId, newRadius) => {
+  const { error } = await supabase
+    .from('sessions')
+    .update({ radius: newRadius })
+    .eq('id', sessionId);
+  if (error) throw error;
+};
+
+export const subscribeToSession = (sessionId, onMemberUpdate, onSessionUpdate) => {
+  const channel = supabase.channel(`session:${sessionId}`);
+  
+  // Subscribe to member updates
+  if (onMemberUpdate) {
+    channel.on(
       'postgres_changes',
       {
         event: 'UPDATE',
@@ -93,9 +103,25 @@ export const subscribeToSession = (sessionId, onUpdate) => {
         table: 'session_members',
         filter: `session_id=eq.${sessionId}`,
       },
-      (payload) => onUpdate(payload.new)
-    )
-    .subscribe();
+      (payload) => onMemberUpdate(payload.new)
+    );
+  }
+  
+  // Subscribe to session updates (for radius changes)
+  if (onSessionUpdate) {
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'sessions',
+        filter: `id=eq.${sessionId}`,
+      },
+      (payload) => onSessionUpdate(payload.new)
+    );
+  }
+  
+  return channel.subscribe();
 };
 
 export const getSessionMembers = async (sessionId) => {

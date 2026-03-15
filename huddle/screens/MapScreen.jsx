@@ -15,6 +15,7 @@ import {
   joinSession,
   leaveSession,
   endSession,
+  updateSessionRadius,
   subscribeToSession,
   getSessionMembers,
   formatDistance,
@@ -263,19 +264,29 @@ export default function MapScreen({ session }) {
   useEffect(() => {
     if (!huddleActive || !currentSession) return;
     loadMembers();
-    const sub = subscribeToSession(currentSession.id, (updatedMember) => {
-      setMembers(prev => {
-        const exists = prev.find(m => m.user_id === updatedMember.user_id);
-        if (exists) {
-          return prev.map(m =>
-            m.user_id === updatedMember.user_id
-              ? { ...m, ...updatedMember, username: m.username, avatar_initials: m.avatar_initials }
-              : m
-          );
+    const sub = subscribeToSession(
+      currentSession.id,
+      // Member updates
+      (updatedMember) => {
+        setMembers(prev => {
+          const exists = prev.find(m => m.user_id === updatedMember.user_id);
+          if (exists) {
+            return prev.map(m =>
+              m.user_id === updatedMember.user_id
+                ? { ...m, ...updatedMember, username: m.username, avatar_initials: m.avatar_initials }
+                : m
+            );
+          }
+          return [...prev, updatedMember];
+        });
+      },
+      // Session updates (for radius changes)
+      (updatedSession) => {
+        if (updatedSession.radius !== radius) {
+          setRadius(updatedSession.radius);
         }
-        return [...prev, updatedMember];
-      });
-    });
+      }
+    );
     realtimeSubscription.current = sub;
     return () => sub.unsubscribe();
   }, [huddleActive, currentSession]);
@@ -325,16 +336,19 @@ export default function MapScreen({ session }) {
     ]).start(() => setBanner(null));
   };
 
-  // ── Alert detection ──────────────────────────────────────
-  useEffect(() => {
-    if (!huddleActive || !userLocation) return;
-    const alertMembers = members.filter(m => m.status === 'alert' && m.user_id !== userId);
-    if (alertMembers.length > prevAlertCount.current) {
-      const names = alertMembers.map(m => m.profiles?.username || 'Someone').join(', ');
-      showBanner(`⚠️ ${names} left the huddle zone`, BANNER_ALERT);
+  // ── Handle radius changes (host only) ────────────────────
+  const handleRadiusChange = async (newRadius) => {
+    setRadius(newRadius);
+    if (isHost && currentSession?.id) {
+      try {
+        await updateSessionRadius(currentSession.id, newRadius);
+      } catch (e) {
+        console.log('Failed to update session radius:', e.message);
+        // Revert on error
+        setRadius(radius);
+      }
     }
-    prevAlertCount.current = alertMembers.length;
-  }, [members]);
+  };
 
   // ── Session actions ──────────────────────────────────────
   const handleCreateHuddle = async () => {
@@ -611,7 +625,7 @@ export default function MapScreen({ session }) {
       {/* Bottom panel */}
       {huddleActive && (
         <View style={styles.bottomPanel}>
-          <RadiusSlider radius={radius} onChange={setRadius} disabled={!isHost} />
+          <RadiusSlider radius={radius} onChange={handleRadiusChange} disabled={!isHost} />
           <View style={styles.bottomRow}>
             <View style={styles.codeChip}>
               <Text style={styles.codeText}>Code: {currentSession?.id}</Text>

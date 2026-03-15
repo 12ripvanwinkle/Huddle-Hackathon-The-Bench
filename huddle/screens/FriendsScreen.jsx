@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     },
 
     titleText: {
-        fontSize: 24,
+        fontSize: 23,
         fontWeight: 'bold',
         color: 'white'
     },

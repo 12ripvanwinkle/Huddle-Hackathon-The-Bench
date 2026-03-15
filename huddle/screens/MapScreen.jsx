@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Image
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
@@ -15,11 +16,13 @@ import {
   joinSession,
   leaveSession,
   endSession,
+  updateSessionRadius,
   subscribeToSession,
   getSessionMembers,
   formatDistance,
   getDistanceMeters
 } from '../services/huddleService';
+import { MovementAnalyzer } from '../services/movementAnalyzer';
 import RadiusSlider from '../components/RadiusSlider';
 import MemberAvatar from '../components/MemberAvatar';
 
@@ -56,11 +59,33 @@ const makeInitials = (value) => {
   return (letters || base.slice(0, 2)).toUpperCase();
 };
 
+const formatTime = (date) => {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHour = ((hours + 11) % 12) + 1;
+  const paddedMinutes = String(minutes).padStart(2, '0');
+  return `${displayHour}:${paddedMinutes} ${ampm}`;
+};
+
+const formatCountdown = (ms) => {
+  if (ms <= 0) return 'Ended';
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
 export default function MapScreen({ session }) {
   const [userLocation, setUserLocation]             = useState(null);
   const [huddleActive, setHuddleActive]             = useState(false);
   const [isHost, setIsHost]                         = useState(false);
   const [radius, setRadius]                         = useState(150);
+  const [durationMinutes, setDurationMinutes]       = useState(30);
+  const [remainingMs, setRemainingMs]               = useState(null);
+  const [showAlertsLog, setShowAlertsLog]           = useState(false);
+  const [alertLog, setAlertLog]                     = useState([]);
+  const [showMembersModal, setShowMembersModal]     = useState(false);
   const [currentSession, setCurrentSession]         = useState(null);
   const [sessionName, setSessionName]               = useState('');
   const [members, setMembers]                       = useState([]);
@@ -84,6 +109,7 @@ export default function MapScreen({ session }) {
   const realtimeSubscription = useRef(null);
   const prevAlertCount       = useRef(0);
   const mapRef               = useRef(null);
+  const movementAnalyzer     = useRef(null);
 
   const userId = session?.user?.id;
   const [myInitials, setMyInitials] = useState('ME');
@@ -173,6 +199,39 @@ export default function MapScreen({ session }) {
               ? 'alert'
               : 'safe';
 
+          // Analyze movement and generate alerts
+          if (movementAnalyzer.current) {
+            const movementData = movementAnalyzer.current.analyzeMovement(
+              { latitude, longitude },
+              members // Pass all members for proximity detection
+            );
+
+            // Process alerts
+            if (movementData.alerts && movementData.alerts.length > 0) {
+              movementData.alerts.forEach(async (alert) => {
+                // Add to alert log
+                const alertMessage = `${alert.emoji} ${alert.message}`;
+                showBanner(alertMessage, alert.severity === 'danger' ? BANNER_ALERT : BANNER_INFO);
+                setAlertLog(prev => [{ time: new Date().toISOString(), message: alertMessage }, ...prev].slice(0, 50));
+
+                // Generate AI-powered alert if available
+                try {
+                  const aiAlert = await movementAnalyzer.current.generateAlert(
+                    { name: myInitials, email: session?.user?.email },
+                    { ...movementData, latitude, longitude },
+                    alert.type
+                  );
+                  if (aiAlert) {
+                    // Could send to group chat here
+                    console.log('AI Alert:', aiAlert);
+                  }
+                } catch (e) {
+                  console.log('Alert generation error:', e.message);
+                }
+              });
+            }
+          }
+
           supabase
             .from('session_members')
             .update({ latitude, longitude, status, last_updated: new Date().toISOString() })
@@ -248,6 +307,19 @@ export default function MapScreen({ session }) {
       centerLat,
       centerLng,
     };
+
+    // Initialize or update movement analyzer for this session
+    if (movementAnalyzer.current) {
+      movementAnalyzer.current.updateSession(centerLat, centerLng, sessionRadius);
+    } else {
+      movementAnalyzer.current = new MovementAnalyzer(
+        userId,
+        currentSession.id,
+        centerLat,
+        centerLng,
+        sessionRadius
+      );
+    }
   }, [
     huddleActive,
     currentSession?.id,
@@ -263,22 +335,69 @@ export default function MapScreen({ session }) {
   useEffect(() => {
     if (!huddleActive || !currentSession) return;
     loadMembers();
-    const sub = subscribeToSession(currentSession.id, (updatedMember) => {
-      setMembers(prev => {
-        const exists = prev.find(m => m.user_id === updatedMember.user_id);
-        if (exists) {
-          return prev.map(m =>
-            m.user_id === updatedMember.user_id
-              ? { ...m, ...updatedMember, username: m.username, avatar_initials: m.avatar_initials }
-              : m
-          );
+    const sub = subscribeToSession(
+      currentSession.id,
+      // Member updates
+      (updatedMember) => {
+        setMembers(prev => {
+          const exists = prev.find(m => m.user_id === updatedMember.user_id);
+          if (exists) {
+            return prev.map(m =>
+              m.user_id === updatedMember.user_id
+                ? { ...m, ...updatedMember, username: m.username, avatar_initials: m.avatar_initials }
+                : m
+            );
+          }
+          return [...prev, updatedMember];
+        });
+      },
+      // Session updates (for radius changes / expiration)
+      (updatedSession) => {
+        if (updatedSession.radius !== radius) {
+          setRadius(updatedSession.radius);
         }
-        return [...prev, updatedMember];
-      });
-    });
+        if (updatedSession.expires_at && updatedSession.expires_at !== currentSession.expires_at) {
+          setCurrentSession(prev => ({ ...prev, expires_at: updatedSession.expires_at }));
+        }
+      }
+    );
     realtimeSubscription.current = sub;
     return () => sub.unsubscribe();
   }, [huddleActive, currentSession]);
+
+  // ── Alert detection (for alert log) ───────────────────────
+  useEffect(() => {
+    if (!huddleActive) return;
+
+    const alertMembers = members.filter(m => m.status === 'alert' && m.user_id !== userId);
+    if (alertMembers.length > prevAlertCount.current) {
+      const names = alertMembers.map(m => m.profiles?.username || 'Someone').join(', ');
+      const message = `⚠️ ${names} left the huddle zone`;
+
+      showBanner(message, BANNER_ALERT);
+      setAlertLog(prev => [{ time: new Date().toISOString(), message }, ...prev].slice(0, 50));
+    }
+
+    prevAlertCount.current = alertMembers.length;
+  }, [members, huddleActive, userId]);
+
+  // ── Countdown timer ──────────────────────────────────────
+  useEffect(() => {
+    if (!huddleActive || !currentSession?.expires_at) {
+      setRemainingMs(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const expires = new Date(currentSession.expires_at).getTime();
+      const diff = expires - Date.now();
+      setRemainingMs(diff);
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [huddleActive, currentSession?.expires_at]);
   
   // ── DEEP LINK HANDLER ──
   
@@ -325,16 +444,19 @@ export default function MapScreen({ session }) {
     ]).start(() => setBanner(null));
   };
 
-  // ── Alert detection ──────────────────────────────────────
-  useEffect(() => {
-    if (!huddleActive || !userLocation) return;
-    const alertMembers = members.filter(m => m.status === 'alert' && m.user_id !== userId);
-    if (alertMembers.length > prevAlertCount.current) {
-      const names = alertMembers.map(m => m.profiles?.username || 'Someone').join(', ');
-      showBanner(`⚠️ ${names} left the huddle zone`, BANNER_ALERT);
+  // ── Handle radius changes (host only) ────────────────────
+  const handleRadiusChange = async (newRadius) => {
+    setRadius(newRadius);
+    if (isHost && currentSession?.id) {
+      try {
+        await updateSessionRadius(currentSession.id, newRadius);
+      } catch (e) {
+        console.log('Failed to update session radius:', e.message);
+        // Revert on error
+        setRadius(radius);
+      }
     }
-    prevAlertCount.current = alertMembers.length;
-  }, [members]);
+  };
 
   // ── Session actions ──────────────────────────────────────
   const handleCreateHuddle = async () => {
@@ -347,13 +469,18 @@ export default function MapScreen({ session }) {
       Alert.alert('Location needed', 'Please wait for your location to load.');
       return;
     }
+
+    const expiresAt = new Date(Date.now() + durationMinutes * 60_000).toISOString();
+
     try {
-      const newSession = await createSession(sessionName, userId, previewRadius);
+      const newSession = await createSession(sessionName, userId, previewRadius, expiresAt);
       setCurrentSession({
         ...newSession,
         centerLat: center.latitude,
         centerLng: center.longitude,
+        expires_at: expiresAt,
       });
+      setRemainingMs(new Date(expiresAt).getTime() - Date.now());
       setRadius(previewRadius);
       setHuddleActive(true);
       setIsHost(true);
@@ -375,6 +502,7 @@ export default function MapScreen({ session }) {
     try {
       const joined = await joinSession(joinCodeInput, userId);
       setCurrentSession(joined);
+      setRemainingMs(joined.expires_at ? new Date(joined.expires_at).getTime() - Date.now() : null);
       setRadius(joined.radius);
       setSessionName(joined.name);
       setHuddleActive(true);
@@ -400,6 +528,7 @@ export default function MapScreen({ session }) {
             setIsHost(false);
             setCurrentSession(null);
             setSessionName('');
+            setRemainingMs(null);
             setMembers([]);
             prevAlertCount.current = 0;
           } catch (e) { Alert.alert('Error', e.message); }
@@ -422,6 +551,7 @@ export default function MapScreen({ session }) {
             setIsHost(false);
             setCurrentSession(null);
             setSessionName('');
+            setRemainingMs(null);
             setMembers([]);
             prevAlertCount.current = 0;
           } catch (e) { Alert.alert('Error', e.message); }
@@ -596,6 +726,9 @@ export default function MapScreen({ session }) {
           <View>
             <Text style={styles.topBarTitle}>{sessionName || currentSession?.name || 'Huddle Session'}</Text>
             <Text style={styles.hostBadge}>{isHost ? '👑 Host' : '👤 Member'}</Text>
+            {remainingMs != null && (
+              <Text style={styles.sessionTimer}>Ends in {formatCountdown(remainingMs)}</Text>
+            )}
           </View>
           <View style={styles.topBarRight}>
             <View style={styles.inviteChip}>
@@ -611,17 +744,18 @@ export default function MapScreen({ session }) {
       {/* Bottom panel */}
       {huddleActive && (
         <View style={styles.bottomPanel}>
-          <RadiusSlider radius={radius} onChange={setRadius} disabled={!isHost} />
+          <RadiusSlider radius={radius} onChange={handleRadiusChange} disabled={!isHost} />
           <View style={styles.bottomRow}>
-            <View style={styles.codeChip}>
-              <Text style={styles.codeText}>Code: {currentSession?.id}</Text>
-            </View>
-            <View style={styles.membersChip}>
+            <TouchableOpacity style={styles.codeChip} onPress={() => setShowAlertsLog(true)}>
+              <Text style={styles.codeText}>⚠️ {alertLog.length} alerts</Text>
+              <Text style={styles.alertCountText}>Tap to view log</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.membersChip} onPress={() => setShowMembersModal(true)}>
               <Text style={styles.membersText}>
                 👥 {activeMembers.length} active
                 {alertMembers.length > 0 && ` · ⚠️ ${alertMembers.length}`}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
           {isHost && (
             <TouchableOpacity style={styles.inviteBtn} onPress={() => setShowInviteModal(true)}>
@@ -631,10 +765,74 @@ export default function MapScreen({ session }) {
         </View>
       )}
 
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+      {/* Alert log modal */}
+      <Modal visible={showAlertsLog} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '70%' }]}>            
+            <Text style={styles.modalTitle}>Alert Log</Text>
+            <Text style={styles.sessionInfo}>{alertLog.length} alerts</Text>
+            <ScrollView style={{ maxHeight: 280 }}>
+              {alertLog.length === 0 ? (
+                <Text style={styles.noAlertsText}>No alerts yet.</Text>
+              ) : (
+                alertLog.map((a, idx) => (
+                  <View key={`${a.time}-${idx}`} style={styles.alertRow}>
+                    <Text style={styles.alertTime}>{new Date(a.time).toLocaleTimeString()}</Text>
+                    <Text style={styles.alertMessage}>{a.message}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAlertsLog(false)}>
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Members modal */}
+      <Modal visible={showMembersModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '70%' }]}>
+            <Text style={styles.modalTitle}>Huddle Members</Text>
+            <Text style={styles.sessionInfo}>{activeMembers.length} active members</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {activeMembers.length === 0 ? (
+                <Text style={styles.noAlertsText}>No members yet.</Text>
+              ) : (
+                activeMembers.map((member) => (
+                  <View key={member.user_id} style={styles.memberRow}>
+                    <MemberAvatar
+                      initials={member.profiles?.avatar_initials || member.avatar_initials || '??'}
+                      status={member.status}
+                      size={40}
+                    />
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>
+                        {member.profiles?.username || member.username || 'Member'}
+                        {member.user_id === userId && ' (You)'}
+                      </Text>
+                      <Text style={styles.memberStatus}>
+                        {member.status === 'alert' ? '⚠️ Outside zone' : '✅ In zone'}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowMembersModal(false)}>
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* FAB (only shown when not in a huddle) */}
+      {!huddleActive && (
+        <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
 
       {!huddleActive && (
         <TouchableOpacity style={styles.joinButton} onPress={() => setShowJoinModal(true)}>
@@ -842,6 +1040,26 @@ export default function MapScreen({ session }) {
                 disabled={false}
               />
 
+              {/* End time */}
+              <Text style={styles.modalLabel}>Ends in</Text>
+              <View style={styles.endTimeRow}>
+                <Text style={styles.endTimeText}>{durationMinutes} min</Text>
+                <Text style={styles.endTimeSubText}>
+                  (ends at {formatTime(new Date(Date.now() + durationMinutes * 60_000))})
+                </Text>
+              </View>
+              <Slider
+                style={{ width: '100%', height: 40 }}
+                minimumValue={5}
+                maximumValue={180}
+                step={5}
+                value={durationMinutes}
+                onValueChange={setDurationMinutes}
+                minimumTrackTintColor={PURPLE}
+                maximumTrackTintColor="#E0E0E0"
+                thumbTintColor={PURPLE}
+              />
+
               <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateHuddle}>
                 <Text style={styles.primaryBtnText}>Create & Get Code</Text>
               </TouchableOpacity>
@@ -938,6 +1156,7 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { fontWeight: '600', fontSize: 15, color: '#222' },
   hostBadge:   { fontSize: 11, color: '#888', marginTop: 2 },
+  sessionTimer: { fontSize: 11, color: '#777', marginTop: 2 },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   inviteChip:  {
     backgroundColor: '#FFF1EC',
@@ -1178,4 +1397,20 @@ const styles = StyleSheet.create({
   },
   previewInfoText: { color: PURPLE, fontSize: 12, textAlign: 'center' },
 
+  endTimeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  endTimeText: { fontSize: 13, color: '#444', fontWeight: '600' },
+  endTimeSubText: { fontSize: 12, color: '#666' },
+
+  // ── Member list styles ───────────────────────────────────
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: '#F9F9F9',
+  },
+  memberInfo: { flex: 1, marginLeft: 12 },
+  memberName: { fontSize: 15, fontWeight: '500', color: '#222' },
+  memberStatus: { fontSize: 12, color: '#666', marginTop: 2 },
 });

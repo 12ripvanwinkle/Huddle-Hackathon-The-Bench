@@ -4,21 +4,25 @@ export const generateInviteCode = () => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
-export const createSession = async (sessionName, hostId, radius = 150) => {
+export const createSession = async (sessionName, hostId, radius = 150, expiresAt = null) => {
   const code = generateInviteCode();
   
   
   const {data: userData} = await supabase.auth.getUser()
 
+  const insertData = {
+    id: code,
+    name: sessionName,
+    host_id: userData.user.id,
+    radius,
+    active: true,
+  };
+
+  if (expiresAt) insertData.expires_at = expiresAt;
+
   const { data, error } = await supabase
     .from('sessions')
-    .insert({
-      id: code,
-      name: sessionName,
-      host_id: userData.user.id,
-      radius,
-      active: true,
-    })
+    .insert(insertData)
     .select()
     .maybeSingle();
 

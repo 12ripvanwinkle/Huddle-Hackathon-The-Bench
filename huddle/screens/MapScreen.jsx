@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform
+  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Image
 } from 'react-native';
 import * as Linking from 'expo-linking';
+import * as Location from 'expo-location';
 import { supabase } from '../services/supabase';
 import {
-  watchAndBroadcastLocation,
   getCurrentLocation,
   requestLocationPermission,
 } from '../services/locationService';
@@ -17,9 +17,11 @@ import {
   endSession,
   subscribeToSession,
   getSessionMembers,
-  formatDistance
+  formatDistance,
+  getDistanceMeters
 } from '../services/huddleService';
 import RadiusSlider from '../components/RadiusSlider';
+import MemberAvatar from '../components/MemberAvatar';
 
 // Only load react-native-maps on mobile
 let MapView, Circle, Marker;
@@ -39,6 +41,20 @@ const RED = '#E24B4A';
 const BLUE_INFO = '#1A73E8';
 const BANNER_ALERT = 'alert';
 const BANNER_INFO = 'info';
+const USER_FOCUS_DELTA = 0.002;
+
+const makeInitials = (value) => {
+  if (!value) return 'ME';
+  const cleaned = String(value).trim();
+  if (!cleaned) return 'ME';
+  const base = cleaned.includes('@') ? cleaned.split('@')[0] : cleaned;
+  const parts = base
+    .replace(/[^a-zA-Z0-9 ]/g, ' ')
+    .split(' ')
+    .filter(Boolean);
+  const letters = parts.slice(0, 2).map(p => p[0]).join('');
+  return (letters || base.slice(0, 2)).toUpperCase();
+};
 
 export default function MapScreen({ session }) {
   const [userLocation, setUserLocation]             = useState(null);
@@ -64,12 +80,19 @@ export default function MapScreen({ session }) {
   const [addressInput, setAddressInput]             = useState('');
 
   const bannerOpacity        = useRef(new Animated.Value(0)).current;
-  const locationSubscription = useRef(null);
+  const uiLocationSubscription = useRef(null);
   const realtimeSubscription = useRef(null);
   const prevAlertCount       = useRef(0);
   const mapRef               = useRef(null);
 
   const userId = session?.user?.id;
+  const [myInitials, setMyInitials] = useState('ME');
+  const [myAvatarUrl, setMyAvatarUrl] = useState(null);
+  const didInitialFocusRef = useRef(false);
+  const lastFocusedSessionRef = useRef(null);
+  const broadcastContextRef = useRef(null);
+  const broadcastInFlightRef = useRef(false);
+  const lastBroadcastAtRef = useRef(0);
 
   const FRIENDS_LIST = [
     { id: 'f1', name: 'Jordan Kim',   initials: 'JK', phone: '+1 555 0101' },
@@ -77,6 +100,38 @@ export default function MapScreen({ session }) {
     { id: 'f3', name: 'Taylor Wong',  initials: 'TW', phone: '+1 555 0103' },
     { id: 'f4', name: 'Sam Rivera',   initials: 'SR', phone: '+1 555 0104' },
   ];
+
+  // Load user marker identity (initials + optional avatar URL from auth metadata)
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      const meta = session?.user?.user_metadata || {};
+      const metaAvatarUrl = meta.avatar_url || meta.picture || null;
+      if (!cancelled) setMyAvatarUrl(metaAvatarUrl);
+
+      if (!userId) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('avatar_initials, username')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        setMyInitials(makeInitials(session?.user?.email));
+        return;
+      }
+
+      setMyInitials(
+        data?.avatar_initials ||
+        makeInitials(data?.username || session?.user?.email)
+      );
+    };
+
+    run();
+    return () => { cancelled = true; };
+  }, [userId]);
 
   // ── Location setup ───────────────────────────────────────
   useEffect(() => {
@@ -89,27 +144,120 @@ export default function MapScreen({ session }) {
       const coords = await getCurrentLocation();
       setUserLocation(coords);
       setPreviewCenter(coords); // set preview center to current location by default
+
+      // Keep the "you" marker moving as location updates
+      if (uiLocationSubscription.current) uiLocationSubscription.current.remove();
+      uiLocationSubscription.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 2,
+        },
+        (location) => {
+          const { latitude, longitude } = location.coords || {};
+          if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
+          setUserLocation({ latitude, longitude });
+
+          const ctx = broadcastContextRef.current;
+          if (!ctx) return;
+
+          const now = Date.now();
+          if (broadcastInFlightRef.current) return;
+          if (now - lastBroadcastAtRef.current < 3000) return;
+
+          lastBroadcastAtRef.current = now;
+          broadcastInFlightRef.current = true;
+
+          const status =
+            getDistanceMeters(ctx.centerLat, ctx.centerLng, latitude, longitude) > ctx.radius
+              ? 'alert'
+              : 'safe';
+
+          supabase
+            .from('session_members')
+            .update({ latitude, longitude, status, last_updated: new Date().toISOString() })
+            .eq('session_id', ctx.sessionId)
+            .eq('user_id', ctx.userId)
+            .then(({ error }) => {
+              if (error) console.log('Location update error:', error.message);
+            })
+            .finally(() => {
+              broadcastInFlightRef.current = false;
+            });
+        }
+      );
     })();
 
     return () => {
-      if (locationSubscription.current) locationSubscription.current.remove();
+      if (uiLocationSubscription.current) uiLocationSubscription.current.remove();
       if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
     };
   }, []);
 
+  // Focus map on the user by default (native only)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (!userLocation || !mapRef.current) return;
+    if (didInitialFocusRef.current) return;
+
+    mapRef.current.animateToRegion({
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude,
+      latitudeDelta: USER_FOCUS_DELTA,
+      longitudeDelta: USER_FOCUS_DELTA,
+    }, 650);
+    didInitialFocusRef.current = true;
+  }, [userLocation]);
+
+  // Re-focus when a huddle gets initialized (native only)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (!huddleActive || !currentSession?.id) return;
+    if (!userLocation || !mapRef.current) return;
+    if (lastFocusedSessionRef.current === currentSession.id) return;
+
+    mapRef.current.animateToRegion({
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude,
+      latitudeDelta: USER_FOCUS_DELTA,
+      longitudeDelta: USER_FOCUS_DELTA,
+    }, 650);
+    lastFocusedSessionRef.current = currentSession.id;
+  }, [huddleActive, currentSession?.id, userLocation]);
+
   // ── Start broadcasting location ──────────────────────────
   useEffect(() => {
-    if (!huddleActive || !currentSession || !userLocation) return;
-    const startTracking = async () => {
-      if (locationSubscription.current) locationSubscription.current.remove();
-      const sub = await watchAndBroadcastLocation(
-        currentSession.id, userId, currentSession.radius,
-        userLocation.latitude, userLocation.longitude
-      );
-      locationSubscription.current = sub;
+    if (!huddleActive || !currentSession?.id || !userId) {
+      broadcastContextRef.current = null;
+      return;
+    }
+
+    const centerLat = currentSession.centerLat ?? userLocation?.latitude;
+    const centerLng = currentSession.centerLng ?? userLocation?.longitude;
+    const sessionRadius = currentSession.radius ?? radius;
+
+    if (typeof centerLat !== 'number' || typeof centerLng !== 'number') {
+      broadcastContextRef.current = null;
+      return;
+    }
+
+    broadcastContextRef.current = {
+      sessionId: currentSession.id,
+      userId,
+      radius: sessionRadius,
+      centerLat,
+      centerLng,
     };
-    startTracking();
-  }, [huddleActive, currentSession]);
+  }, [
+    huddleActive,
+    currentSession?.id,
+    currentSession?.radius,
+    currentSession?.centerLat,
+    currentSession?.centerLng,
+    radius,
+    userId,
+    userLocation,
+  ]);
 
   // ── Realtime member updates ──────────────────────────────
   useEffect(() => {
@@ -246,7 +394,6 @@ export default function MapScreen({ session }) {
         onPress: async () => {
           try {
             await leaveSession(currentSession.id, userId);
-            if (locationSubscription.current) locationSubscription.current.remove();
             if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
             setShowSessionModal(false);
             setHuddleActive(false);
@@ -269,7 +416,6 @@ export default function MapScreen({ session }) {
         onPress: async () => {
           try {
             await endSession(currentSession.id);
-            if (locationSubscription.current) locationSubscription.current.remove();
             if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
             setShowSessionModal(false);
             setHuddleActive(false);
@@ -334,18 +480,20 @@ export default function MapScreen({ session }) {
       {/* ── MAP ── */}
       {userLocation ? (
         Platform.OS === 'web' ? (
-           <View style={{ flex: 1, width: '100%', height: '100%' }}>
-              <WebMap
-                userLocation={userLocation}
-                members={members}
-                radius={radius}
-                huddleActive={huddleActive}
-                userId={userId}
-                previewMode={showCreateModal}
-                previewRadius={previewRadius}
-                previewCenter={activePrevCenter}
-              />
-            </View>
+          <div style={{ flex: 1, width: '100%', height: '100%' }}>
+            <WebMap
+              userLocation={userLocation}
+              myInitials={myInitials}
+              myAvatarUrl={myAvatarUrl}
+              members={members}
+              radius={radius}
+              huddleActive={huddleActive}
+              userId={userId}
+              previewMode={showCreateModal}
+              previewRadius={previewRadius}
+              previewCenter={activePrevCenter}
+            />
+          </div>
         ) : (
           <MapView
             ref={mapRef}
@@ -353,12 +501,26 @@ export default function MapScreen({ session }) {
             initialRegion={{
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
-              latitudeDelta: 0.001,
-              longitudeDelta: 0.001,
+              latitudeDelta: USER_FOCUS_DELTA,
+              longitudeDelta: USER_FOCUS_DELTA,
             }}
-            showsUserLocation
             showsMyLocationButton
           >
+            {/* You */}
+            <Marker
+              coordinate={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
+              title="You"
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+            >
+              {myAvatarUrl ? (
+                <View style={styles.mePhotoWrap}>
+                  <Image source={{ uri: myAvatarUrl }} style={styles.mePhoto} />
+                </View>
+              ) : (
+                <MemberAvatar initials={myInitials} status="safe" size={46} />
+              )}
+            </Marker>
             {/* Active session circle */}
             {huddleActive && (
               <Circle
@@ -392,9 +554,16 @@ export default function MapScreen({ session }) {
                   key={m.user_id}
                   coordinate={{ latitude: m.latitude, longitude: m.longitude }}
                   title={m.profiles?.username || m.username || 'Member'}
-                  description={m.status === 'alert' ? '⚠️ Outside zone' : '✅ In zone'}
-                  pinColor={m.status === 'alert' ? '#E24B4A' : '#534AB7'}
-                />
+                  description={m.status === 'alert' ? 'Outside zone' : 'In zone'}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  tracksViewChanges={false}
+                >
+                  <MemberAvatar
+                    initials={m.profiles?.avatar_initials || m.avatar_initials || '??'}
+                    status={m.status}
+                    size={40}
+                  />
+                </Marker>
               ))
             }
           </MapView>
@@ -727,6 +896,16 @@ const styles = StyleSheet.create({
   map:         { flex: 1 },
   loadingMap:  { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e8f0e8' },
   loadingText: { fontSize: 16, color: '#666' },
+  mePhotoWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: 'white',
+    overflow: 'hidden',
+    backgroundColor: PURPLE,
+  },
+  mePhoto: { width: '100%', height: '100%' },
 
   // ── Alert banner ─────────────────────────────────────────
   banner: {

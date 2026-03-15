@@ -24,6 +24,7 @@ import {
   getDistanceMeters
 } from '../services/huddleService';
 import { MovementAnalyzer } from '../services/movementAnalyzer';
+import { postSessionAlert, subscribeToSessionAlerts } from '../services/alertService';
 import RadiusSlider from '../components/RadiusSlider';
 import MemberAvatar from '../components/MemberAvatar';
 
@@ -118,6 +119,7 @@ export default function MapScreen({ session }) {
   const userId = session?.user?.id;
   const [myInitials, setMyInitials] = useState('ME');
   const [myAvatarUrl, setMyAvatarUrl] = useState(null);
+  const [myUsername, setMyUsername] = useState('Member');
   const didInitialFocusRef = useRef(false);
   const lastFocusedSessionRef = useRef(null);
   const broadcastContextRef = useRef(null);
@@ -125,6 +127,8 @@ export default function MapScreen({ session }) {
   const lastBroadcastAtRef = useRef(0);
   const expirationHandledRef = useRef(false);
   const huddleActiveRef = useRef(false);
+  const alertsChannelRef = useRef(null);
+  const lastMyZoneStatusRef = useRef('safe');
 
   useEffect(() => {
     huddleActiveRef.current = huddleActive;
@@ -156,9 +160,11 @@ export default function MapScreen({ session }) {
       if (cancelled) return;
       if (error) {
         setMyInitials(makeInitials(session?.user?.email));
+        setMyUsername((session?.user?.email || 'Member').split('@')[0]);
         return;
       }
 
+      if (data?.username) setMyUsername(data.username);
       setMyInitials(
         data?.avatar_initials ||
         makeInitials(data?.username || session?.user?.email)
@@ -210,6 +216,28 @@ export default function MapScreen({ session }) {
               ? 'alert'
               : 'safe';
 
+          if (lastMyZoneStatusRef.current !== status) {
+            const boundaryType = status === 'alert' ? 'boundary_exit' : 'boundary_return';
+            const boundarySeverity = status === 'alert' ? 'danger' : 'info';
+            const boundaryMessage = status === 'alert'
+              ? 'left the huddle zone'
+              : 'returned to the huddle zone';
+
+            void postSessionAlert({
+              sessionId: ctx.sessionId,
+              userId: ctx.userId,
+              username: myUsername,
+              type: boundaryType,
+              severity: boundarySeverity,
+              message: boundaryMessage,
+              emoji: status === 'alert' ? '⚠️' : '✅',
+            }).catch((e) => {
+              console.log('postSessionAlert (boundary) error:', e?.message ?? e);
+            });
+
+            lastMyZoneStatusRef.current = status;
+          }
+
           const updatePromise = supabase
             .from('session_members')
             .upsert(
@@ -235,10 +263,18 @@ export default function MapScreen({ session }) {
               // Process alerts
               if (movementData.alerts && movementData.alerts.length > 0) {
                 movementData.alerts.forEach(async (alert) => {
-                  // Add to alert log
-                  const alertMessage = `${alert.emoji} ${alert.message}`;
-                  showBanner(alertMessage, alert.severity === 'danger' ? BANNER_ALERT : BANNER_INFO);
-                  setAlertLog(prev => [{ time: new Date().toISOString(), message: alertMessage }, ...prev].slice(0, 50));
+                  // Share alerts with everyone in the huddle
+                  void postSessionAlert({
+                    sessionId: ctx.sessionId,
+                    userId: ctx.userId,
+                    username: myUsername,
+                    type: alert.type,
+                    severity: alert.severity,
+                    message: alert.message,
+                    emoji: alert.emoji,
+                  }).catch((e) => {
+                    console.log('postSessionAlert error:', e?.message ?? e);
+                  });
 
                   // Generate AI-powered alert if available
                   try {
@@ -440,7 +476,7 @@ export default function MapScreen({ session }) {
     const alertMembers = members.filter(m => m.status === 'alert' && m.user_id !== userId);
     const currentAlertedIds = new Set(alertMembers.map(m => m.user_id));
     const newlyAlerted = alertMembers.filter(m => !prevAlertedIdsRef.current.has(m.user_id));
-    if (newlyAlerted.length > 0) {
+    if (false) {
       const names = newlyAlerted.map(m => m.profiles?.username || m.username || 'Member').join(', ');
       const message = `⚠️ ${names} left the huddle zone`;
 
@@ -454,6 +490,15 @@ export default function MapScreen({ session }) {
 
   useEffect(() => {
     expirationHandledRef.current = false;
+  }, [currentSession?.id]);
+
+  useEffect(() => {
+    // Reset alert UI between sessions
+    setAlertLog([]);
+    setShowAlertsLog(false);
+    prevAlertedIdsRef.current = new Set();
+    prevAlertCount.current = 0;
+    lastMyZoneStatusRef.current = 'safe';
   }, [currentSession?.id]);
 
   // ── Countdown timer ──────────────────────────────────────
@@ -551,6 +596,31 @@ export default function MapScreen({ session }) {
       Animated.timing(bannerOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start(() => setBanner(null));
   };
+
+  useEffect(() => {
+    if (!huddleActive || !currentSession?.id) return;
+
+    if (alertsChannelRef.current) {
+      alertsChannelRef.current.unsubscribe();
+      alertsChannelRef.current = null;
+    }
+
+    alertsChannelRef.current = subscribeToSessionAlerts(currentSession.id, (alertRow) => {
+      const who = alertRow.username || 'Member';
+      const text = `${alertRow.emoji || ''} ${who}: ${alertRow.message}`.trim();
+      const type = alertRow.severity === 'danger' ? BANNER_ALERT : BANNER_INFO;
+
+      showBanner(text, type);
+      setAlertLog(prev => [{ time: alertRow.created_at || new Date().toISOString(), message: text }, ...prev].slice(0, 50));
+    });
+
+    return () => {
+      if (alertsChannelRef.current) {
+        alertsChannelRef.current.unsubscribe();
+        alertsChannelRef.current = null;
+      }
+    };
+  }, [huddleActive, currentSession?.id]);
 
   // ── Handle radius changes (host only) ────────────────────
   const handleRadiusChange = async (newRadius) => {
@@ -958,15 +1028,15 @@ export default function MapScreen({ session }) {
 
       {/* FAB (only shown when not in a huddle) */}
       {!huddleActive && (
-        <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      )}
+        <View style={[styles.preHuddleActions, { bottom: insets.bottom + 24 }]}>
+          <TouchableOpacity style={styles.joinButton} onPress={() => setShowJoinModal(true)}>
+            <Text style={styles.joinButtonText}>Join a Huddle</Text>
+          </TouchableOpacity>
 
-      {!huddleActive && (
-        <TouchableOpacity style={styles.joinButton} onPress={() => setShowJoinModal(true)}>
-          <Text style={styles.joinButtonText}>Join a Huddle</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* ══ SESSION OPTIONS MODAL ══ */}
@@ -1360,9 +1430,16 @@ const styles = StyleSheet.create({
   inviteBtnText: { color: 'white', fontWeight: '600', fontSize: 14 },
 
   // ── FAB & Join button ────────────────────────────────────
-  fab: {
+  preHuddleActions: {
     position: 'absolute',
-    bottom: 320, right: 20,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  fab: {
     width: 52, height: 52,
     borderRadius: 26,
     backgroundColor: PURPLE,
@@ -1375,10 +1452,9 @@ const styles = StyleSheet.create({
   },
   fabText: { color: 'white', fontSize: 28, fontWeight: '300', marginTop: -2 },
   joinButton: {
-    position: 'absolute',
-    bottom: 100,
-    alignSelf: 'center',
     backgroundColor: PURPLE,
+    height: 52,
+    justifyContent: 'center',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 24,

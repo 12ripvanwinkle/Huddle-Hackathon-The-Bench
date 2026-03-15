@@ -112,32 +112,6 @@ const AuthScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  WelcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    alignContent: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
-  },
-  WelcomeBackText: {
-    fontSize: 18,
-    marginBottom: 20,
-    alignContent: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
-  },
-
-  button:{
-    backgroundColor: 'orange',
-    padding: 10,
-    borderRadius: 5,
-    marginTop: 10,
-  }
-
-
-})
 
 export default AuthScreen;
 

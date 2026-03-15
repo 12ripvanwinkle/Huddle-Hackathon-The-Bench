@@ -18,33 +18,45 @@ const RegisterScreen = () => {
   const [phone, setPhone] = useState('');
 
   const Register = async () => {
+    console.log("Register button pressed");
     try {
       setLoading(true);
+
+      // 1️⃣ Validate inputs
       if (!email || !password || !confirmPassword || !phone)
         throw new Error('Please fill in all fields.');
-
       if (password !== confirmPassword)
         throw new Error('Passwords do not match.');
 
-      const { error } = await supabase.auth.signUp({
-        email: email,
-        password: password,
+      // 2️⃣ Sign up user with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
         options: {
-          data: {
-            phone: phone,
-          }
+          data: { phone } // store phone in user_metadata
         }
       });
       if (error) throw error;
 
+      // 3️⃣ Insert user profile into 'profiles' table
+      const{ error: insertError} = await supabase
+      .from('profiles')
+      .insert({
+        email,
+        phone
+      });
+
+      // 4️⃣ Show success alert and navigate to login
       Alert.alert('Account created! 🎉', 'You can now sign in.', [
         { text: 'OK', onPress: () => navigation.navigate('Auth') }
       ]);
 
+      // 5️⃣ Clear form
       setEmail('');
       setPassword('');
       setConfirmPassword('');
       setPhone('');
+
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Sign up failed', error.message);
@@ -70,7 +82,7 @@ const RegisterScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          onChangeText={(text) => setEmail(text)}
+          onChangeText={setEmail}
           value={email}
           autoCapitalize="none"
           keyboardType="email-address"
@@ -79,7 +91,7 @@ const RegisterScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Phone Number"
-          onChangeText={(text) => setPhone(text)}
+          onChangeText={setPhone}
           value={phone}
           keyboardType="phone-pad"
         />
@@ -87,7 +99,7 @@ const RegisterScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          onChangeText={(text) => setPassword(text)}
+          onChangeText={setPassword}
           value={password}
           secureTextEntry
         />
@@ -95,14 +107,14 @@ const RegisterScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Confirm Password"
-          onChangeText={(text) => setConfirmPassword(text)}
+          onChangeText={setConfirmPassword}
           value={confirmPassword}
           secureTextEntry
         />
 
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={() => Register()}
+          onPress={Register}
           disabled={loading}
         >
           {loading
@@ -120,7 +132,6 @@ const RegisterScreen = () => {
         >
           <Text style={styles.secondaryBtnText}>Sign In</Text>
         </TouchableOpacity>
-
       </View>
     </SafeAreaProvider>
   );

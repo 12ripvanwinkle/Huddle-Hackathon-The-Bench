@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Image, AppState
+  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Image
 } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
@@ -43,13 +43,6 @@ const BANNER_ALERT = 'alert';
 const BANNER_INFO = 'info';
 const USER_FOCUS_DELTA = 0.002;
 
-// Helper function to show alerts only when app is active
-const showAlertIfActive = (title, message, buttons) => {
-  if (AppState.currentState === 'active') {
-    Alert.alert(title, message, buttons);
-  }
-};
-
 const makeInitials = (value) => {
   if (!value) return 'ME';
   const cleaned = String(value).trim();
@@ -87,6 +80,7 @@ export default function MapScreen({ session }) {
   const [addressInput, setAddressInput]             = useState('');
 
   const bannerOpacity        = useRef(new Animated.Value(0)).current;
+  const uiLocationSubscription = useRef(null);
   const realtimeSubscription = useRef(null);
   const prevAlertCount       = useRef(0);
   const mapRef               = useRef(null);
@@ -141,91 +135,61 @@ export default function MapScreen({ session }) {
 
   // ── Location setup ───────────────────────────────────────
   useEffect(() => {
-    let locationSubscription = null;
-    let appStateSubscription = null;
-
-    const setupLocation = async () => {
+    (async () => {
       const granted = await requestLocationPermission();
       if (!granted) {
-        showAlertIfActive('Permission needed', 'Location access is required for Huddle.');
+        Alert.alert('Permission needed', 'Location access is required for Huddle.');
         return;
       }
       const coords = await getCurrentLocation();
       setUserLocation(coords);
       setPreviewCenter(coords); // set preview center to current location by default
 
-      // Only watch location when app is active
-      const startWatching = async () => {
-        if (locationSubscription) locationSubscription.remove();
-        
-        locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 2000,
-            distanceInterval: 2,
-          },
-          (location) => {
-            const { latitude, longitude } = location.coords || {};
-            if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
-            setUserLocation({ latitude, longitude });
+      // Keep the "you" marker moving as location updates
+      if (uiLocationSubscription.current) uiLocationSubscription.current.remove();
+      uiLocationSubscription.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 2,
+        },
+        (location) => {
+          const { latitude, longitude } = location.coords || {};
+          if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
+          setUserLocation({ latitude, longitude });
 
-            const ctx = broadcastContextRef.current;
-            if (!ctx) return;
+          const ctx = broadcastContextRef.current;
+          if (!ctx) return;
 
-            const now = Date.now();
-            if (broadcastInFlightRef.current) return;
-            if (now - lastBroadcastAtRef.current < 3000) return;
+          const now = Date.now();
+          if (broadcastInFlightRef.current) return;
+          if (now - lastBroadcastAtRef.current < 3000) return;
 
-            lastBroadcastAtRef.current = now;
-            broadcastInFlightRef.current = true;
+          lastBroadcastAtRef.current = now;
+          broadcastInFlightRef.current = true;
 
-            const status =
-              getDistanceMeters(ctx.centerLat, ctx.centerLng, latitude, longitude) > ctx.radius
-                ? 'alert'
-                : 'safe';
+          const status =
+            getDistanceMeters(ctx.centerLat, ctx.centerLng, latitude, longitude) > ctx.radius
+              ? 'alert'
+              : 'safe';
 
-            supabase
-              .from('session_members')
-              .update({ latitude, longitude, status, last_updated: new Date().toISOString() })
-              .eq('session_id', ctx.sessionId)
-              .eq('user_id', ctx.userId)
-              .then(({ error }) => {
-                if (error) console.log('Location update error:', error.message);
-              })
-              .finally(() => {
-                broadcastInFlightRef.current = false;
-              });
-          }
-        );
-      };
-
-      const stopWatching = () => {
-        if (locationSubscription) {
-          locationSubscription.remove();
-          locationSubscription = null;
+          supabase
+            .from('session_members')
+            .update({ latitude, longitude, status, last_updated: new Date().toISOString() })
+            .eq('session_id', ctx.sessionId)
+            .eq('user_id', ctx.userId)
+            .then(({ error }) => {
+              if (error) console.log('Location update error:', error.message);
+            })
+            .finally(() => {
+              broadcastInFlightRef.current = false;
+            });
         }
-      };
-
-      // Handle app state changes
-      appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
-        if (nextAppState === 'active') {
-          startWatching();
-        } else {
-          stopWatching();
-        }
-      });
-
-      // Start watching initially if app is active
-      if (AppState.currentState === 'active') {
-        startWatching();
-      }
-    };
-
-    setupLocation();
+      );
+    })();
 
     return () => {
-      if (locationSubscription) locationSubscription.remove();
-      if (appStateSubscription) appStateSubscription.remove();
+      if (uiLocationSubscription.current) uiLocationSubscription.current.remove();
       if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
     };
   }, []);
@@ -375,12 +339,12 @@ export default function MapScreen({ session }) {
   // ── Session actions ──────────────────────────────────────
   const handleCreateHuddle = async () => {
     if (!sessionName.trim()) {
-      showAlertIfActive('Name required', 'Please enter a session name.');
+      Alert.alert('Name required', 'Please enter a session name.');
       return;
     }
     const center = previewCenter || userLocation;
     if (!center) {
-      showAlertIfActive('Location needed', 'Please wait for your location to load.');
+      Alert.alert('Location needed', 'Please wait for your location to load.');
       return;
     }
     try {
@@ -397,15 +361,15 @@ export default function MapScreen({ session }) {
       setPreviewCenter(null);
       setShowLocationPicker(false);
       setAddressInput('');
-      showAlertIfActive('Huddle Created! 🎉', `Share this code:\n\n${newSession.id}`);
+      Alert.alert('Huddle Created! 🎉', `Share this code:\n\n${newSession.id}`);
     } catch (e) {
-      showAlertIfActive('Error', e.message);
+      Alert.alert('Error', e.message);
     }
   };
 
   const handleJoinHuddle = async () => {
     if (joinCodeInput.length < 4) {
-      showAlertIfActive('Invalid code', 'Enter the code from your friend.');
+      Alert.alert('Invalid code', 'Enter the code from your friend.');
       return;
     }
     try {
@@ -416,14 +380,14 @@ export default function MapScreen({ session }) {
       setHuddleActive(true);
       setIsHost(false);
       setShowJoinModal(false);
-      showAlertIfActive('Joined! 🙌', `You joined ${joined.name}`);
+      Alert.alert('Joined! 🙌', `You joined ${joined.name}`);
     } catch (e) {
-      showAlertIfActive('Error', e.message);
+      Alert.alert('Error', e.message);
     }
   };
 
   const handleLeaveSession = () => {
-    showAlertIfActive('Leave Session', "You'll be removed from the huddle.", [
+    Alert.alert('Leave Session', "You'll be removed from the huddle.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave', style: 'destructive',
@@ -438,14 +402,14 @@ export default function MapScreen({ session }) {
             setSessionName('');
             setMembers([]);
             prevAlertCount.current = 0;
-          } catch (e) { showAlertIfActive('Error', e.message); }
+          } catch (e) { Alert.alert('Error', e.message); }
         },
       },
     ]);
   };
 
   const handleEndHuddle = () => {
-    showAlertIfActive('End Huddle', 'This will end the session for all members.', [
+    Alert.alert('End Huddle', 'This will end the session for all members.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'End for Everyone', style: 'destructive',
@@ -460,7 +424,7 @@ export default function MapScreen({ session }) {
             setSessionName('');
             setMembers([]);
             prevAlertCount.current = 0;
-          } catch (e) { showAlertIfActive('Error', e.message); }
+          } catch (e) { Alert.alert('Error', e.message); }
         },
       },
     ]);
@@ -472,7 +436,7 @@ export default function MapScreen({ session }) {
       await Share.share({
         message: `Join my Huddle session "${sessionName}"!\n\nCode: ${currentSession?.id}\n\nDownload Huddle to stay safe 🤝`,
       });
-    } catch (e) { showAlertIfActive('Could not share', e.message); }
+    } catch (e) { Alert.alert('Could not share', e.message); }
   };
 
   const shareLink = async () => {
@@ -480,7 +444,7 @@ export default function MapScreen({ session }) {
       await Share.share({
         message: `Join my Huddle!\n\nhttps://huddle.app/join/${currentSession?.id}\n\nOr enter code: ${currentSession?.id}`,
       });
-    } catch (e) { showAlertIfActive('Could not share', e.message); }
+    } catch (e) { Alert.alert('Could not share', e.message); }
   };
 
   const toggleFriendSelect = (friendId) => {
@@ -491,11 +455,11 @@ export default function MapScreen({ session }) {
 
   const sendFriendInvites = () => {
     if (selectedFriends.length === 0) {
-      showAlertIfActive('No friends selected', 'Tap friends to select them first.');
+      Alert.alert('No friends selected', 'Tap friends to select them first.');
       return;
     }
     const names = FRIENDS_LIST.filter(f => selectedFriends.includes(f.id)).map(f => f.name).join(', ');
-    showAlertIfActive('Invites Sent! 📨', `Invited: ${names}\n\nCode: ${currentSession?.id}`);
+    Alert.alert('Invites Sent! 📨', `Invited: ${names}\n\nCode: ${currentSession?.id}`);
     setSelectedFriends([]);
     setShowInviteModal(false);
   };

@@ -34,6 +34,8 @@ const WebMap = Platform.OS === 'web'
   ? require('../components/WebMap').default
   : null;
 
+
+
 const PURPLE = '#534AB7';
 const RED = '#E24B4A';
 const GREEN = '#1D9E75';
@@ -427,8 +429,11 @@ export default function MapScreen({ session }) {
   const alertMembers  = members.filter(m => m.status === 'alert');
 
   // ── Render ───────────────────────────────────────────────
-
+  // ADD THIS
+  console.log('Platform:', Platform.OS);
+  console.log('Maps key:', process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
   return (
+    
     <View style={styles.container}>
 
       {/* Map */}

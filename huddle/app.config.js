@@ -13,8 +13,13 @@ export default {
     },
     ios: {
       supportsTablet: false,
+      bundleIdentifier: 'com.anonymous.huddle',
+      config: {
+        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+      },
     },
     android: {
+      package: 'com.anonymous.huddle',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#534AB7',
@@ -23,6 +28,11 @@ export default {
         'ACCESS_FINE_LOCATION',
         'ACCESS_BACKGROUND_LOCATION',
       ],
+      config: {
+        googleMaps: {
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+        },
+      },
       jsEngine: 'hermes',
     },
     jsEngine: 'hermes',

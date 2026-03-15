@@ -1,53 +1,44 @@
 import React, { useState } from "react";
-<<<<<<< HEAD
-import { View, Text, StyleSheet, Modal, Image, Button, TouchableOpacity, Alert, Pressable, ScrollView } from "react-native";
-=======
-import { View, Text, StyleSheet, Image, Button, TouchableOpacity, Alert } from "react-native";
->>>>>>> 4061a7ffdf290385d678f0ce05feb5b4d729f5b9
+import { 
+    View, Text, StyleSheet, Modal, Image, Button, 
+    TouchableOpacity, Alert, Pressable, ScrollView 
+} from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
 import ProfileCard from './ProfileCard';
 import Card from '../screens/Card';
-//import { supabase } from "../services/supabase";
-// const friend = {
-//     id: 1,
-//     name: 'John Doe',
-//     description: 'Invited you to join the group "Hiking Buddies"',
-//     imageUrl: 'https://randomuser.me/api/portraits/men}/1.jpg',}
-// const invitations = () => {
-//     return(
-//         <Modal>
-//             <View style={styles.centeredView}>
-//                 <View style={styles.modalView}>
-//                     <ScrollView>
-//                          <Card 
-//                                 key={friend.id}
-//                                 name={friend.name} 
-//                                 description={friend.description} 
-//                                 imageUrl={friend.imageUrl} 
-//                                 onButtonPress={() => handleCardAction(friend.id)} 
-//                             />
-//                     </ScrollView>
-//                     <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
-//                 </View>
-//             </View>
-//         </Modal>
-//     )
-// }
-
+// import { supabase } from "../services/supabase";
 
 const ProfileScreen = () => {
-<<<<<<< HEAD
+    // User profile state
+    const [username, setUsername] = useState("");
+    const [email, setEmail] = useState("");
+    const [avatar_initials, setAvatar_Initials] = useState("");
 
+    const profile = async () => {
+        const { data: { userData } } = await supabase.auth.getUsers();
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('username,email,avatar_initials');
+        if (error) throw new Error("No Data Retrieved");
+        if (data) {
+            setUsername(data.username);
+            setEmail(data.email);
+            setAvatar_Initials(data.avatar_initials);
+        }
+    };
+
+    // Modal and image picker state
     const [modalVisible, setModalVisible] = useState(false);
     const [profileImage, setProfileImage] = useState('https://ui-avatars.com/api/?name=User&background=fb7854&color=fff');
 
+    // Pick image from library
     const pickImage = async () => {
         try {
             console.log('Starting image picker...');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             console.log('Permission status:', status);
-            
+
             if (status !== 'granted') {
                 Alert.alert('Permission Denied', 'We need permission to access your photos');
                 return;
@@ -74,10 +65,7 @@ const ProfileScreen = () => {
                 'Image Picker Not Available',
                 'On emulator, enter an image URL instead',
                 [
-                    {
-                        text: 'Enter URL',
-                        onPress: () => promptImageUrl()
-                    },
+                    { text: 'Enter URL', onPress: () => promptImageUrl() },
                     { text: 'Cancel' }
                 ]
             );
@@ -90,52 +78,30 @@ const ProfileScreen = () => {
             'Paste an image URL:',
             [
                 { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Set',
-                    onPress: (url) => {
-                        if (url) {
-                            setProfileImage(url);
-                            Alert.alert('Success', 'Profile picture updated!');
-                        }
+                { text: 'Set', onPress: (url) => {
+                    if (url) {
+                        setProfileImage(url);
+                        Alert.alert('Success', 'Profile picture updated!');
                     }
-                }
+                }}
             ],
             'plain-text'
         );
     };
-=======
-    const [username, setUsername] = useState("")
-    const [email, setEmail] = useState("")
-    const [avatar_initials, setAvatar_Initials] = useState("")
-    const profile = async () => {
-        const{data: { userData }} = await supabase.auth.getUsers();
-        const {data, error}= await supabase
-            .from('profiles')
-            .select('username,email,avatar_initials')
-        if(error) throw new Error("No Datat Retrieved")
-        if (data){
-            setUsername(data.username)
-            setEmail(data.email)
-            setAvatar_Initials(data.avatar_initials)
-        }
-    }
->>>>>>> 4061a7ffdf290385d678f0ce05feb5b4d729f5b9
+
     return (
         <SafeAreaProvider>
             <View style={styles.ScreenBack}>
                 <ScrollView contentContainerStyle={styles.scrollContent}>
                     <View style={styles.topContent}>
                         <Pressable 
-                            onPress={() => {
-                                console.log('Image pressed');
-                                pickImage();
-                            }}
+                            onPress={pickImage}
                             style={({ pressed }) => [
                                 styles.imageWrapper,
                                 pressed && { opacity: 0.7 }
                             ]}
                         >
-                            <Image source={{uri: profileImage}} style={styles.logoImage}/>
+                            <Image source={{ uri: profileImage }} style={styles.logoImage} />
                             <Text style={styles.editText}>Tap to change</Text>
                         </Pressable>
                         <View style={styles.textContainer}>
@@ -148,11 +114,12 @@ const ProfileScreen = () => {
                         <ProfileCard icon="📱" label="Phone" value="+1 (555) 123-4567" />
                     </View>
 
-                    <View> 
+                    <View>
                         <Button 
-                        title="Invitations" 
-                        onPress={() => setModalVisible(true)} 
-                        color="#fb7854" />
+                            title="Invitations" 
+                            onPress={() => setModalVisible(true)} 
+                            color="#fb7854" 
+                        />
                     </View>
 
                     <View style={styles.spacer} />
@@ -164,98 +131,39 @@ const ProfileScreen = () => {
 
                 <Modal visible={modalVisible}>
                     <View style={styles.centeredView}>
-                    <View style={styles.modalView}>
-                        <ScrollView>
-                         {/* <Card 
-                                key={friend.id}
-                                name={friend.name} 
-                                description={friend.description} 
-                                imageUrl={friend.imageUrl} 
-                                onButtonPress={() => handleCardAction(friend.id)} 
-                            /> */}
-                        </ScrollView>
-                        <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
-                    </View>
+                        <View style={styles.modalView}>
+                            <ScrollView>
+                                {/* <Card 
+                                    key={friend.id}
+                                    name={friend.name} 
+                                    description={friend.description} 
+                                    imageUrl={friend.imageUrl} 
+                                    onButtonPress={() => handleCardAction(friend.id)} 
+                                /> */}
+                            </ScrollView>
+                            <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
+                        </View>
                     </View>
                 </Modal>
             </View>
         </SafeAreaProvider>
     );
-}
+};
 
 const styles = StyleSheet.create({
-        ScreenBack: {
-            flex: 1,
-            backgroundColor: '#fb7854',
-            flexDirection: 'column',
-        },
-
-        scrollContent: {
-            flexGrow: 1,
-        },
-
-        topContent: {
-            alignItems: 'center',
-            paddingTop: 20,
-        },
-
-        infoSection: {
-            marginTop: 20,
-            marginBottom: 20,
-        },
-
-        textContainer: {
-            marginTop: 12,
-        },
-
-        spacer: {
-            flex: 1,
-        },
-
-        titleText: {
-            fontSize: 24,
-            fontWeight: 'bold',
-            color: 'white',
-            textAlign: 'center',
-        },
-
-        nameText: {
-            fontSize: 18,
-            color: 'white',
-            marginTop: 8,
-        },
-
-        imageWrapper: {
-            alignItems: 'center',
-        },
-
-        editText: {
-            color: 'white',
-            fontSize: 12,
-            marginTop: 8,
-            fontStyle: 'italic',
-        },
-
-        logoImage:{
-            width: 150,
-            height: 150,
-            borderRadius: 75,
-            borderColor : 'white',
-            borderWidth: 2,
-        },
-
-        logoutButton: {
-            backgroundColor: 'white',
-            padding: 16,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-
-        logoutButtonText: {
-            color: '#fb7854',
-            fontSize: 18,
-            fontWeight: 'bold',
-        },
+    ScreenBack: { flex: 1, backgroundColor: '#fb7854', flexDirection: 'column' },
+    scrollContent: { flexGrow: 1 },
+    topContent: { alignItems: 'center', paddingTop: 20 },
+    infoSection: { marginTop: 20, marginBottom: 20 },
+    textContainer: { marginTop: 12 },
+    spacer: { flex: 1 },
+    titleText: { fontSize: 24, fontWeight: 'bold', color: 'white', textAlign: 'center' },
+    nameText: { fontSize: 18, color: 'white', marginTop: 8 },
+    imageWrapper: { alignItems: 'center' },
+    editText: { color: 'white', fontSize: 12, marginTop: 8, fontStyle: 'italic' },
+    logoImage: { width: 150, height: 150, borderRadius: 75, borderColor: 'white', borderWidth: 2 },
+    logoutButton: { backgroundColor: 'white', padding: 16, alignItems: 'center', justifyContent: 'center' },
+    logoutButtonText: { color: '#fb7854', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ProfileScreen;

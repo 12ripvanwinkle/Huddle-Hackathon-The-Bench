@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Modal, TextInput, Alert, Animated, Share, ScrollView, Platform
 } from 'react-native';
+import * as Linking from 'expo-linking';
 import { supabase } from '../services/supabase';
 import {
   watchAndBroadcastLocation,

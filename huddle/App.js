@@ -27,7 +27,18 @@ import RegisterScreen from './screens/RegisterScreen';
 
 import * as Linking from 'expo-linking';
 const prefix = Linking.createURL('/');
-
+const linking = {
+  prefixes: [prefix, 'huddle://'],
+  config: {
+    screens: {
+      Main: {
+        screens: {
+          Map: 'join/:code',
+        },
+      },
+    },
+  },
+};
 // FRONTEND NAVIGATION SETUP
 const Tab = createBottomTabNavigator();   // Bottom navigation tabs
 const Stack = createStackNavigator();     // Stack navigation for auth vs main app
@@ -152,24 +163,6 @@ export default function App() {
   }
 
 
-    // FRONTEND LOADING SCREEN
-    // Displayed while the app checks login status from backend
-    if (loading) {
-        return (
-            <View
-                style={{
-                    flex: 1,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    backgroundColor: PURPLE
-                }}
-            >
-                <ActivityIndicator size="large" color="white" />
-            </View>
-        );
-    }
-
-
 
   return (
     <>
@@ -177,7 +170,7 @@ export default function App() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
       {/* FRONTEND APP NAVIGATION ROOT */}
-      <NavigationContainer linking={{ prefixes: [prefix] }}>
+      <NavigationContainer linking={linking}>
 
         {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
         <Stack.Navigator screenOptions={{ headerShown: false }}>

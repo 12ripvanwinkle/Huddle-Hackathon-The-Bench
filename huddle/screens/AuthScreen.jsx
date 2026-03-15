@@ -5,11 +5,13 @@ import {
   Alert, ActivityIndicator, StyleSheet
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabase';
 
-const PURPLE = '#534AB7';
+const PURPLE = '#fb7854';
 
 const AuthScreen = () => {
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,7 +67,7 @@ const AuthScreen = () => {
     <SafeAreaProvider>
       <View style={styles.container}>
         <Text style={styles.title}>Huddle 🤝</Text>
-        <Text style={styles.subtitle}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Welcome New User :D</Text>
 
         <TextInput
           style={styles.input}
@@ -99,7 +101,7 @@ const AuthScreen = () => {
 
         <TouchableOpacity
           style={styles.secondaryBtn}
-          onPress={() => Register()}
+          onPress={() => navigation.navigate('Register')}
           disabled={loading}
         >
           <Text style={styles.secondaryBtnText}>Sign Up</Text>
@@ -109,6 +111,33 @@ const AuthScreen = () => {
     </SafeAreaProvider>
   );
 };
+
+const styles = StyleSheet.create({
+  WelcomeText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    alignContent: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+  },
+  WelcomeBackText: {
+    fontSize: 18,
+    marginBottom: 20,
+    alignContent: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+  },
+
+  button:{
+    backgroundColor: 'orange',
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+  }
+
+
+})
 
 export default AuthScreen;
 

@@ -6,13 +6,16 @@ export const generateInviteCode = () => {
 
 export const createSession = async (sessionName, hostId, radius = 150) => {
   const code = generateInviteCode();
+  
+  
+  const {data: userData} = await supabase.auth.getUser()
 
   const { data, error } = await supabase
     .from('sessions')
     .insert({
       id: code,
       name: sessionName,
-      host_id: hostId,
+      host_id: userData.user.id,
       radius,
       active: true,
     })
@@ -30,7 +33,7 @@ export const createSession = async (sessionName, hostId, radius = 150) => {
     .from('session_members')
     .insert({
       session_id: code,
-      user_id: hostId,
+      user_id: userData.user.id,
       status: 'safe',
     });
 

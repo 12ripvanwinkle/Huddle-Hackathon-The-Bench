@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Modal, Image, Button, TouchableOpacity, Alert, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Image, Button, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
 import ProfileCard from './ProfileCard';
@@ -33,71 +33,21 @@ import Card from '../screens/Card';
 
 
 const ProfileScreen = () => {
-
-    const [modalVisible, setModalVisible] = useState(false);
-    const [profileImage, setProfileImage] = useState('https://ui-avatars.com/api/?name=User&background=fb7854&color=fff');
-
-    const pickImage = async () => {
-        try {
-            console.log('Starting image picker...');
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            console.log('Permission status:', status);
-            
-            if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'We need permission to access your photos');
-                return;
-            }
-
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 1,
-            });
-
-            console.log('Image picker result:', result);
-
-            if (!result.canceled) {
-                setProfileImage(result.assets[0].uri);
-                Alert.alert('Success', 'Profile picture updated!');
-                // TODO: Upload to Supabase and update user profile
-            }
-        } catch (error) {
-            console.error('Image picker error:', error);
-            // Fallback for emulator - allow entering image URL
-            Alert.alert(
-                'Image Picker Not Available',
-                'On emulator, enter an image URL instead',
-                [
-                    {
-                        text: 'Enter URL',
-                        onPress: () => promptImageUrl()
-                    },
-                    { text: 'Cancel' }
-                ]
-            );
+    const [username, setUsername] = useState("")
+    const [email, setEmail] = useState("")
+    const [avatar_initials, setAvatar_Initials] = useState("")
+    const profile = async () => {
+        const{data: { userData }} = await supabase.auth.getUsers();
+        const {data, error}= await supabase
+            .from('profiles')
+            .select('username,email,avatar_initials')
+        if(error) throw new Error("No Datat Retrieved")
+        if (data){
+            setUsername(data.username)
+            setEmail(data.email)
+            setAvatar_Initials(data.avatar_initials)
         }
-    };
-
-    const promptImageUrl = () => {
-        Alert.prompt(
-            'Enter Image URL',
-            'Paste an image URL:',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Set',
-                    onPress: (url) => {
-                        if (url) {
-                            setProfileImage(url);
-                            Alert.alert('Success', 'Profile picture updated!');
-                        }
-                    }
-                }
-            ],
-            'plain-text'
-        );
-    };
+    }
     return (
         <SafeAreaProvider>
             <View style={styles.ScreenBack}>

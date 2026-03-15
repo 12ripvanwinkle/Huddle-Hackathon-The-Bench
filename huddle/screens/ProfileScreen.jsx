@@ -4,7 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
 import ProfileCard from './ProfileCard';
 import Card from '../screens/Card';
-//import { supabase } from "../services/supabase";
+import { supabase } from "../services/supabase";
 // const friend = {
 //     id: 1,
 //     name: 'John Doe',
@@ -36,6 +36,7 @@ const ProfileScreen = () => {
     const [username, setUsername] = useState("")
     const [email, setEmail] = useState("")
     const [avatar_initials, setAvatar_Initials] = useState("")
+    const [loggingOut, setLoggingOut] = useState(false);
     const profile = async () => {
         const{data: { userData }} = await supabase.auth.getUsers();
         const {data, error}= await supabase
@@ -113,6 +114,33 @@ const ProfileScreen = () => {
             'plain-text'
         );
     };
+
+    const handleLogout = () => {
+        if (loggingOut) return;
+
+        Alert.alert(
+            "Log out",
+            "Are you sure you want to log out?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Log out",
+                    style: "destructive",
+                    onPress: async () => {
+                        setLoggingOut(true);
+                        try {
+                            const { error } = await supabase.auth.signOut();
+                            if (error) Alert.alert("Logout failed", error.message);
+                        } catch (e) {
+                            Alert.alert("Logout failed", e?.message ?? "Unknown error");
+                        } finally {
+                            setLoggingOut(false);
+                        }
+                    }
+                },
+            ]
+        );
+    };
     return (
         <SafeAreaProvider>
             <View style={styles.ScreenBack}>
@@ -151,8 +179,14 @@ const ProfileScreen = () => {
                     <View style={styles.spacer} />
                 </ScrollView>
 
-                <TouchableOpacity style={styles.logoutButton} onPress={() => Alert.alert('Sign Out')}>
-                    <Text style={styles.logoutButtonText}>Log Out</Text>
+                <TouchableOpacity
+                    style={[styles.logoutButton, loggingOut && styles.logoutButtonDisabled]}
+                    onPress={handleLogout}
+                    disabled={loggingOut}
+                >
+                    <Text style={[styles.logoutButtonText, loggingOut && styles.logoutButtonTextDisabled]}>
+                        {loggingOut ? "Logging out..." : "Log Out"}
+                    </Text>
                 </TouchableOpacity>
 
                 <Modal visible={modalVisible}>
@@ -248,6 +282,14 @@ const styles = StyleSheet.create({
             color: '#fb7854',
             fontSize: 18,
             fontWeight: 'bold',
+        },
+
+        logoutButtonDisabled: {
+            opacity: 0.8,
+        },
+
+        logoutButtonTextDisabled: {
+            color: '#999',
         },
 });
 

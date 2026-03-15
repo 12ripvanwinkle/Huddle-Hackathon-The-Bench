@@ -4,7 +4,7 @@ const PURPLE = '#534AB7';
 const RED = '#E24B4A';
 
 export default function WebMap({ 
-  userLocation, members, radius, huddleActive, userId,
+  userLocation, myInitials, myAvatarUrl, members, radius, huddleActive, userId,
   previewMode, previewRadius, previewCenter
 }) {
   const mapRef            = useRef(null);
@@ -16,6 +16,38 @@ export default function WebMap({
 
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
+  const getYouMarkerConfig = () => {
+    if (!window.google) return {};
+
+    if (myAvatarUrl) {
+      return {
+        icon: {
+          url: myAvatarUrl,
+          scaledSize: new window.google.maps.Size(44, 44),
+          anchor: new window.google.maps.Point(22, 22),
+        },
+        label: null,
+      };
+    }
+
+    return {
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: PURPLE,
+        fillOpacity: 1,
+        strokeColor: 'white',
+        strokeWeight: 2,
+      },
+      label: {
+        text: (myInitials || 'ME').slice(0, 2).toUpperCase(),
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: '700',
+      },
+    };
+  };
+
   // ── Initialize map ───────────────────────────────────────
   useEffect(() => {
     if (typeof window === 'undefined' || !mapRef.current) return;
@@ -25,7 +57,7 @@ export default function WebMap({
 
       const map = new window.google.maps.Map(mapRef.current, {
         center: { lat: userLocation.latitude, lng: userLocation.longitude },
-        zoom: 18,
+        zoom: 20,
         disableDefaultUI: false,
         zoomControl: true,
       });
@@ -36,14 +68,7 @@ export default function WebMap({
         position: { lat: userLocation.latitude, lng: userLocation.longitude },
         map,
         title: 'You',
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: PURPLE,
-          fillOpacity: 1,
-          strokeColor: 'white',
-          strokeWeight: 2,
-        },
+        ...getYouMarkerConfig(),
       });
     };
 
@@ -71,11 +96,18 @@ export default function WebMap({
     if (!mapInstanceRef.current || !userLocation || !window.google) return;
     const pos = { lat: userLocation.latitude, lng: userLocation.longitude };
     mapInstanceRef.current.setCenter(pos);
-    mapInstanceRef.current.setZoom(18);
+    mapInstanceRef.current.setZoom(20);
     if (youMarkerRef.current) {
       youMarkerRef.current.setPosition(pos);
     }
   }, [userLocation]);
+
+  useEffect(() => {
+    if (!youMarkerRef.current || !window.google) return;
+    const cfg = getYouMarkerConfig();
+    if (cfg.icon) youMarkerRef.current.setIcon(cfg.icon);
+    youMarkerRef.current.setLabel(cfg.label || null);
+  }, [myInitials, myAvatarUrl]);
 
   // ── Preview circle (shows when create modal is open) ────
   useEffect(() => {

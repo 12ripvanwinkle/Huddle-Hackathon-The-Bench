@@ -12,6 +12,7 @@ import { supabase } from './services/supabase';
 import MapScreen from './screens/MapScreen';     // Screen that displays the GPS map
 import FriendsScreen from './screens/FriendsScreen'; // Screen showing friends/group members
 import AuthScreen from './screens/AuthScreen';   // Login / signup screen
+import RegisterScreen from './screens/RegisterScreen'; // Screen for user registration
 
 import * as Linking from 'expo-linking';
 const prefix = Linking.createURL('/');

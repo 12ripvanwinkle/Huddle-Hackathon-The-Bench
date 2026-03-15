@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, StyleSheet
+  Alert, ActivityIndicator, StyleSheet, Image
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -66,7 +66,8 @@ const AuthScreen = () => {
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <Text style={styles.title}>Huddle 🤝</Text>
+        <Image source={require('../screens/Logo hackathon.png')} style={styles.logoImage}/>
+        <Text style={styles.title}>Huddle</Text>
         <Text style={styles.subtitle}>Welcome New User :D</Text>
 
         <TextInput
@@ -113,31 +114,51 @@ const AuthScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  WelcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    alignContent: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
+  container: {
+    flex: 1, justifyContent: 'center',
+    padding: 24, backgroundColor: PURPLE,
   },
-  WelcomeBackText: {
-    fontSize: 18,
-    marginBottom: 20,
-    alignContent: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
+  title: {
+    fontSize: 32, fontWeight: '700', fontFamily:'sans-serif',
+    color: 'white', textAlign: 'center', marginBottom: 8,
   },
-
-  button:{
-    backgroundColor: 'orange',
-    padding: 10,
-    borderRadius: 5,
-    marginTop: 10,
+  subtitle: {
+    fontSize: 16, color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center', marginBottom: 32,
+  },
+  input: {
+    backgroundColor: 'white', borderRadius: 10,
+    padding: 12, fontSize: 15, marginBottom: 16, color: '#222',
+  },
+  primaryBtn: {
+    backgroundColor: 'white', borderRadius: 12,
+    padding: 14, alignItems: 'center', marginBottom: 12,
+  },
+  primaryBtnText: {
+    color: PURPLE, fontWeight: '600', fontSize: 15,
+  },
+  orText: {
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center', marginBottom: 12,
+  },
+  secondaryBtn: {
+    borderWidth: 1, borderColor: 'white',
+    borderRadius: 12, padding: 14, alignItems: 'center',
+  },
+  secondaryBtnText: {
+    color: 'white', fontWeight: '600', fontSize: 15,
+  },
+  logoImage:{
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderRadius: 75,
+    borderColor : 'white',
+    borderWidth: 2,
   }
+});
 
-
-})
 
 export default AuthScreen;
 

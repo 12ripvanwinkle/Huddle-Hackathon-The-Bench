@@ -126,7 +126,6 @@ const RegisterScreen = () => {
   );
 };
 
-export default RegisterScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -195,4 +194,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 14,
   },
+  logoImage:{
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderRadius: 75,
+    borderColor : 'white',
+    borderWidth: 2,
+  }
 });
+
+export default RegisterScreen;

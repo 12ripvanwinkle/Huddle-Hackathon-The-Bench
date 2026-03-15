@@ -32,6 +32,11 @@ const prefix = Linking.createURL('/');
 const Tab = createBottomTabNavigator();   // Bottom navigation tabs
 const Stack = createStackNavigator();     // Stack navigation for auth vs main app
 
+// FRONTEND NAVIGATION SETUP
+const Tab = createBottomTabNavigator();   // Bottom navigation tabs
+const Stack = createStackNavigator();     // Stack navigation for auth vs main app
+
+// FRONTEND DESIGN CONSTANT
 // FRONTEND DESIGN CONSTANT
 const PURPLE = '#534AB7';
 

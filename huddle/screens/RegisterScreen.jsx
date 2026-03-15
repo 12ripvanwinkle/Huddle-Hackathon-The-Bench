@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, StyleSheet
+  Alert, ActivityIndicator, StyleSheet, Image
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -76,7 +76,9 @@ const RegisterScreen = () => {
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>Create Account 🤝</Text>
+        <Image source={require('../screens/Logo hackathon.png')} style={styles.logoImage}/>
+
+        <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Join Huddle</Text>
 
         <TextInput
@@ -137,7 +139,6 @@ const RegisterScreen = () => {
   );
 };
 
-export default RegisterScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -206,4 +207,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 14,
   },
+  logoImage:{
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderRadius: 75,
+    borderColor : 'white',
+    borderWidth: 2,
+  }
 });
+
+export default RegisterScreen;

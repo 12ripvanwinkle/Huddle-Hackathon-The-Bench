@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, StyleSheet
+  Alert, ActivityIndicator, StyleSheet, Image
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -66,7 +66,8 @@ const AuthScreen = () => {
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <Text style={styles.title}>Huddle 🤝</Text>
+        <Image source={require('../screens/Logo hackathon.png')} style={styles.logoImage}/>
+        <Text style={styles.title}>Huddle</Text>
         <Text style={styles.subtitle}>Welcome New User :D</Text>
 
         <TextInput
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
     padding: 24, backgroundColor: PURPLE,
   },
   title: {
-    fontSize: 32, fontWeight: '700',
+    fontSize: 32, fontWeight: '700', fontFamily:'sans-serif',
     color: 'white', textAlign: 'center', marginBottom: 8,
   },
   subtitle: {
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
     padding: 12, fontSize: 15, marginBottom: 16, color: '#222',
   },
   primaryBtn: {
-    backgroundColor: '#fb7854', borderRadius: 12,
+    backgroundColor: 'white', borderRadius: 12,
     padding: 14, alignItems: 'center', marginBottom: 12,
   },
   primaryBtnText: {
@@ -150,4 +151,17 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     color: 'white', fontWeight: '600', fontSize: 15,
   },
+  logoImage:{
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderRadius: 75,
+    borderColor : 'white',
+    borderWidth: 2,
+  }
 });
+
+
+export default AuthScreen;
+

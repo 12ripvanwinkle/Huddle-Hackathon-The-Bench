@@ -41,23 +41,22 @@ const PURPLE = '#534AB7';
 // FRONTEND COMPONENT
 // Simple reusable back button used in navigation headers
 function BackButton({ onPress }) {
-    return (
-        <TouchableOpacity
-            onPress={onPress}
-            style={{
-                marginLeft: 16,
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                justifyContent: 'center',
-                alignItems: 'center',
-            }}
-        >
-            {/* Icon placeholder */}
-            <Text style={{ fontSize: 20, color:'white', marginTop: -2}}></Text>
-        </TouchableOpacity>
-    );
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        marginLeft: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
+      <Text style={{ fontSize: 20, color: 'white', marginTop: -2 }}>←</Text>
+    </TouchableOpacity>
+  );
 }
 
 
@@ -65,63 +64,68 @@ function BackButton({ onPress }) {
 // FRONTEND MAIN NAVIGATION
 // Bottom tabs for the core GPS tracking features
 function MainTabs({ session }) {
-    return (
-        <Tab.Navigator
-            screenOptions={{
-                tabBarActiveTintColor: PURPLE,
-                tabBarInactiveTintColor: '#999',
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: PURPLE,
+        tabBarInactiveTintColor: '#999',
+        tabBarStyle: {
+          height: 60, paddingBottom: 8,
+          backgroundColor: 'white',
+          borderTopWidth: 0.5, borderTopColor: '#EBEBEB',
+          elevation: 10,
+        },
+        headerShown: false,
+      }}
+    >
+      <Tab.Screen
+        name="Map"
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🗺️</Text>,
+        }}
+      >
+        {() => <MapScreen session={session} />}
+      </Tab.Screen>
 
-                // FRONTEND: styling for bottom navigation
-                tabBarStyle: {
-                    height: 60,
-                    paddingBottom: 8,
-                    backgroundColor: 'white',
-                    borderTopWidth: 0.5,
-                    borderTopColor: '#EBEBEB',
-                    elevation: 10,
-                },
-
-                headerShown: false,
-            }}
-        >
-
-            {/* FRONTEND: Map tab */}
-            {/* This tap this and the screen would display the live GPS tracking map */}
-            <Tab.Screen
-                name="Map"
-                options={{
-                    tabBarIcon: ({ color }) => <Text style={{fontSize: 20, color}}>🗺️</Text>,
-                }}
+      <Tab.Screen
+        name="Friends"
+        component={FriendsScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text>,
+          headerShown: true,
+          headerTitle: 'Group Members',
+          headerStyle: { backgroundColor: PURPLE, elevation: 0, shadowOpacity: 0 },
+          headerTintColor: 'white',
+          headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+          headerLeft: ({ canGoBack, navigation }) =>
+            canGoBack ? <BackButton onPress={() => navigation.goBack()} /> : null,
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => supabase.auth.signOut()}
+              style={{ marginRight: 16 }}
             >
-                {() => <MapScreen session={session} />}
-            </Tab.Screen>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
+                Sign out
+              </Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
 
-
-            {/* FRONTEND: Friends tab */}
-            {/* Shows group members whose GPS location may be shared */}
-            <Tab.Screen
-                name="Friends"
-                component={FriendsScreen}
-                options={{
-                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text>,
-                }}
-            />
-
-            <Tab.Screen
-                name="Profile"
-                component={ProfileScreen}
-                options={{
-                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
-                }}
-            />
-        </Tab.Navigator>
-    );
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
+        }}
+      />
+    </Tab.Navigator>
+  );
 }
 
 
 
 export default function App() {
-
     // FRONTEND STATE MANAGEMENT
     // session stores the logged-in user from the backend
     const [session, setSession] = useState(null);
@@ -130,39 +134,41 @@ export default function App() {
     const [loading, setLoading] = useState(true);
 
 
-    useEffect(() => {
+  useEffect(() => {
+    // BACKEND: Check if user already has an active login session
+    // Supabase returns session data if user is authenticated
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
 
-        // BACKEND: Check if user already has an active login session
-        // Supabase returns session data if user is authenticated
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setLoading(false);
-        });
+    // BACKEND: Listen for authentication changes
+    // This runs when a user logs in or logs out
+    const { data: { subscription } } =
+      supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+      });
 
-        // BACKEND: Listen for authentication changes
-        // This runs when a user logs in or logs out
-        const { data: { subscription } } =
-            supabase.auth.onAuthStateChange((_event, session) => {
-                setSession(session);
-            });
+    // Cleanup listener when component unmounts
+    return () => subscription.unsubscribe();
+  }, []);
 
-        // Cleanup listener when component unmounts
-        return () => subscription.unsubscribe();
+  useEffect(() => {
+    // FRONTEND (Android UI control)
+    // Hides the Android navigation bar for immersive full-screen map experience
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setButtonStyleAsync('light');
+    }
+  }, []);
 
-    }, []);
-
-
-    useEffect(() => {
-
-        // FRONTEND (Android UI control)
-        // Hides the Android navigation bar for immersive full-screen map experience
-        if (Platform.OS === 'android') {
-            NavigationBar.setVisibilityAsync('hidden');
-            NavigationBar.setButtonStyleAsync('light');
-        }
-
-    }, []);
-
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: PURPLE }}>
+        <ActivityIndicator size="large" color="white" />
+      </View>
+    );
+  }
 
 
     // FRONTEND LOADING SCREEN
@@ -184,37 +190,37 @@ export default function App() {
 
 
 
-    return (
-        <>
-            {/* FRONTEND STATUS BAR */}
-            <StatusBar style="dark" translucent backgroundColor="transparent" />
+  return (
+    <>
+      {/* FRONTEND STATUS BAR */}
+      <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-            {/* FRONTEND APP NAVIGATION ROOT */}
-            <NavigationContainer linking={{ prefixes:[prefix] }}>
+      {/* FRONTEND APP NAVIGATION ROOT */}
+      <NavigationContainer linking={{ prefixes: [prefix] }}>
 
-                {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
 
-                    {/* AUTH LOGIC */}
-                    {/* If user is logged in → show main app (map + friends) */}
-                    {/* If user not logged in → show login screen */}
+          {/* AUTH LOGIC */}
+          {/* If user is logged in → show main app (map + friends) */}
+          {/* If user not logged in → show login screen */}
 
-                    {session ? (
-                        // User is logged in → Main app
-                        <Stack.Screen name="Main">
-                            {() => <MainTabs session={session} />}
-                        </Stack.Screen>
-                    ) : (
-                        // No session → show auth screens
-                        <>
-                            <Stack.Screen name="Auth" component={AuthScreen} />
-                            <Stack.Screen name="Register" component={RegisterScreen} />
-                        </>
-                    )}
+          {session ? (
+            // User is logged in → Main app
+            <Stack.Screen name="Main">
+              {() => <MainTabs session={session} />}
+            </Stack.Screen>
+          ) : (
+            // No session → show auth screens
+            <>
+              <Stack.Screen name="Auth" component={AuthScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+            </>
+          )}
 
-                </Stack.Navigator>
+        </Stack.Navigator>
 
-            </NavigationContainer>
-        </>
-    );
+      </NavigationContainer>
+    </>
+  );
 }

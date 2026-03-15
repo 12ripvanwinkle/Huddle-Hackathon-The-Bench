@@ -1,18 +1,16 @@
 // import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Movement thresholds
-const DANGER_VELOCITY = 30; // km/h - considered dangerous speed
-const HIGH_SPEED_THRESHOLD = 20; // km/h - fast but not dangerous
-const SPEED_SPIKE_DELTA = 12; // km/h increase between readings
-const SPEED_SPIKE_WINDOW_MS = 5000; // how quickly the increase happens
-const STATIONARY_TIMEOUT = 600000; // 10 minutes in milliseconds
-const ALERT_COOLDOWN = 60000; // 1 minute between alerts
-const PROXIMITY_THRESHOLD = 50; // meters - close proximity for meeting detection
-const BOUNDARY_BUFFER = 10; // meters - buffer zone before boundary alert
+const DANGER_VELOCITY = 30; 
+const HIGH_SPEED_THRESHOLD = 20; 
+const SPEED_SPIKE_DELTA = 12; 
+const SPEED_SPIKE_WINDOW_MS = 5000; 
+const STATIONARY_TIMEOUT = 600000; 
+const ALERT_COOLDOWN = 60000; 
+const PROXIMITY_THRESHOLD = 50; 
+const BOUNDARY_BUFFER = 10; 
 
-// // Initialize Gemini (free tier)
-// // Get your free API key at: https://makersuite.google.com/app/apikey
-const genAI = null; // Temporarily disabled for testing
+const genAI = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY; 
 export const getDistanceMeters = (lat1, lng1, lat2, lng2) => {
   const R = 6371000;
   const dLat = (lat2 - lat1) * (Math.PI / 180);

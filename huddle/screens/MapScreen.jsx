@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Image
+  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Image, Vibration
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import * as Linking from 'expo-linking';
@@ -100,6 +100,8 @@ export default function MapScreen({ session }) {
   const [joinCodeInput, setJoinCodeInput]           = useState('');
   const [selectedFriends, setSelectedFriends]       = useState([]);
   const [inviteSearch, setInviteSearch]             = useState('');
+  const [friends, setFriends]                       = useState([]);
+  const [friendsLoading, setFriendsLoading]         = useState(false);
   const [banner, setBanner]                         = useState(null);
   const [menuHidden, setMenuHidden]                 = useState(false);
 
@@ -116,11 +118,16 @@ export default function MapScreen({ session }) {
   const prevAlertedIdsRef    = useRef(new Set());
   const mapRef               = useRef(null);
   const movementAnalyzer     = useRef(null);
+  const panicFlashOpacity    = useRef(new Animated.Value(0)).current;
+  const panicFlashAnimRef    = useRef(null);
+  const lastPanicKeyRef      = useRef(null);
+  const lastLocalPanicSentAtRef = useRef(0);
 
   const userId = session?.user?.id;
   const [myInitials, setMyInitials] = useState('ME');
   const [myAvatarUrl, setMyAvatarUrl] = useState(null);
   const [myUsername, setMyUsername] = useState('Member');
+  const [panicFlashWho, setPanicFlashWho] = useState(null);
   const didInitialFocusRef = useRef(false);
   const lastFocusedSessionRef = useRef(null);
   const broadcastContextRef = useRef(null);
@@ -134,13 +141,6 @@ export default function MapScreen({ session }) {
   useEffect(() => {
     huddleActiveRef.current = huddleActive;
   }, [huddleActive]);
-
-  const FRIENDS_LIST = [
-    { id: 'f1', name: 'Jordan Kim',   initials: 'JK', phone: '+1 555 0101' },
-    { id: 'f2', name: 'Alex Morales', initials: 'AM', phone: '+1 555 0102' },
-    { id: 'f3', name: 'Taylor Wong',  initials: 'TW', phone: '+1 555 0103' },
-    { id: 'f4', name: 'Sam Rivera',   initials: 'SR', phone: '+1 555 0104' },
-  ];
 
   // Load user marker identity (initials + optional avatar URL from auth metadata)
   useEffect(() => {
@@ -500,6 +500,15 @@ export default function MapScreen({ session }) {
     prevAlertedIdsRef.current = new Set();
     prevAlertCount.current = 0;
     lastMyZoneStatusRef.current = 'safe';
+    setPanicFlashWho(null);
+    lastPanicKeyRef.current = null;
+    lastLocalPanicSentAtRef.current = 0;
+    try {
+      panicFlashOpacity.stopAnimation();
+      panicFlashOpacity.setValue(0);
+      if (panicFlashAnimRef.current?.stop) panicFlashAnimRef.current.stop();
+      panicFlashAnimRef.current = null;
+    } catch {}
   }, [currentSession?.id]);
 
   // ── Countdown timer ──────────────────────────────────────
@@ -589,6 +598,66 @@ export default function MapScreen({ session }) {
   };
 
   // ── Banner ───────────────────────────────────────────────
+  const loadFriends = async () => {
+    if (!userId) {
+      setFriends([]);
+      return;
+    }
+
+    setFriendsLoading(true);
+    setFriends([]);
+    try {
+      const { data: friendRows, error } = await supabase
+        .from('friends')
+        .select('user_id, friend_id, status')
+        .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+        .eq('status', 'accepted')
+        .limit(200);
+
+      if (error) throw error;
+
+      const otherIds = Array.from(
+        new Set(
+          (friendRows || [])
+            .map((r) => (r.user_id === userId ? r.friend_id : r.user_id))
+            .filter(Boolean)
+        )
+      );
+
+      if (otherIds.length === 0) {
+        setFriends([]);
+        return;
+      }
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar_initials')
+        .in('id', otherIds);
+
+      if (profilesError) throw profilesError;
+
+      const byId = new Map((profiles || []).map((p) => [p.id, p]));
+      const normalized = otherIds.map((id) => {
+        const p = byId.get(id);
+        const name = p?.username || p?.full_name || 'Friend';
+        const initials = p?.avatar_initials || makeInitials(name);
+        return { id, name, initials, phone: '' };
+      });
+
+      setFriends(normalized);
+    } catch (e) {
+      console.log('Error loading friends:', e?.message ?? e);
+      setFriends([]);
+    } finally {
+      setFriendsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showInviteModal) return;
+    void loadFriends();
+  }, [showInviteModal, userId]);
+
   const showBanner = (message, type) => {
     setBanner({ message, type });
     Animated.sequence([
@@ -596,6 +665,38 @@ export default function MapScreen({ session }) {
       Animated.delay(4000),
       Animated.timing(bannerOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start(() => setBanner(null));
+  };
+
+  const triggerPanicFlash = (who) => {
+    setPanicFlashWho(who || 'Member');
+
+    if (Platform.OS !== 'web') {
+      try {
+        Vibration.vibrate([0, 350, 120, 350, 120, 600], false);
+      } catch {}
+    }
+
+    try {
+      panicFlashOpacity.stopAnimation();
+      panicFlashOpacity.setValue(0);
+      if (panicFlashAnimRef.current?.stop) panicFlashAnimRef.current.stop();
+
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(panicFlashOpacity, { toValue: 0.92, duration: 140, useNativeDriver: true }),
+          Animated.timing(panicFlashOpacity, { toValue: 0.0, duration: 140, useNativeDriver: true }),
+        ]),
+        { iterations: 10 }
+      );
+
+      panicFlashAnimRef.current = anim;
+      anim.start(({ finished }) => {
+        if (finished) setPanicFlashWho(null);
+      });
+    } catch (e) {
+      console.log('Panic flash error:', e?.message ?? e);
+      setPanicFlashWho(null);
+    }
   };
 
   const handlePanic = () => {
@@ -613,12 +714,14 @@ export default function MapScreen({ session }) {
         {
           text: 'Send Alert',
           style: 'destructive',
-          onPress: async () => {
-            setPanicSending(true);
-            try {
-              await postSessionAlert({
-                sessionId: currentSession.id,
-                userId,
+           onPress: async () => {
+             setPanicSending(true);
+             lastLocalPanicSentAtRef.current = Date.now();
+             triggerPanicFlash(myUsername || 'Member');
+             try {
+                await postSessionAlert({
+                  sessionId: currentSession.id,
+                  userId,
                 username: myUsername || 'Member',
                 type: 'panic',
                 severity: 'danger',
@@ -649,6 +752,16 @@ export default function MapScreen({ session }) {
       const who = alertRow.username || 'Member';
       const text = `${alertRow.emoji || ''} ${who}: ${alertRow.message}`.trim();
       const type = alertRow.severity === 'danger' ? BANNER_ALERT : BANNER_INFO;
+
+      if (alertRow.type === 'panic') {
+        const key = alertRow.id ?? `${alertRow.user_id || ''}-${alertRow.created_at || ''}-${alertRow.message || ''}`;
+        if (alertRow.user_id === userId && Date.now() - lastLocalPanicSentAtRef.current < 6000) {
+          lastPanicKeyRef.current = key;
+        } else if (lastPanicKeyRef.current !== key) {
+          lastPanicKeyRef.current = key;
+          triggerPanicFlash(who);
+        }
+      }
 
       showBanner(text, type);
       setAlertLog(prev => [{ time: alertRow.created_at || new Date().toISOString(), message: text }, ...prev].slice(0, 50));
@@ -843,13 +956,13 @@ export default function MapScreen({ session }) {
       Alert.alert('No friends selected', 'Tap friends to select them first.');
       return;
     }
-    const names = FRIENDS_LIST.filter(f => selectedFriends.includes(f.id)).map(f => f.name).join(', ');
+    const names = friends.filter(f => selectedFriends.includes(f.id)).map(f => f.name).join(', ');
     Alert.alert('Invites Sent! 📨', `Invited: ${names}\n\nCode: ${currentSession?.id}`);
     setSelectedFriends([]);
     setShowInviteModal(false);
   };
 
-  const filteredFriends = FRIENDS_LIST.filter(f =>
+  const filteredFriends = friends.filter(f =>
     f.name.toLowerCase().includes(inviteSearch.toLowerCase())
   );
 
@@ -957,6 +1070,16 @@ export default function MapScreen({ session }) {
         <View style={styles.loadingMap}>
           <Text style={styles.loadingText}>📍 Getting your location...</Text>
         </View>
+       )}
+
+      {/* Panic flash overlay */}
+      {panicFlashWho && (
+        <Animated.View pointerEvents="none" style={[styles.panicFlashOverlay, { opacity: panicFlashOpacity }]}>
+          <View style={[styles.panicFlashInner, { paddingTop: insets.top + 32 }]}>
+            <Text style={styles.panicFlashTitle}>PANIC ALERT</Text>
+            <Text style={styles.panicFlashWho}>{panicFlashWho}</Text>
+          </View>
+        </Animated.View>
       )}
 
       {/* Banner */}
@@ -1181,6 +1304,8 @@ export default function MapScreen({ session }) {
             <Text style={styles.friendsHeader}>Select Friends {selectedFriends.length > 0 && `(${selectedFriends.length})`}</Text>
             <TextInput style={styles.input} placeholder="Search friends..." value={inviteSearch} onChangeText={setInviteSearch} />
             <ScrollView style={{ maxHeight: 200 }}>
+              {friendsLoading && <Text style={styles.emptyFriendsText}>Loading friends...</Text>}
+              {!friendsLoading && filteredFriends.length === 0 && <Text style={styles.emptyFriendsText}>No friends yet.</Text>}
               {filteredFriends.map(friend => {
                 const selected = selectedFriends.includes(friend.id);
                 return (
@@ -1190,7 +1315,7 @@ export default function MapScreen({ session }) {
                     </View>
                     <View style={styles.friendInfo}>
                       <Text style={styles.friendName}>{friend.name}</Text>
-                      <Text style={styles.friendPhone}>{friend.phone}</Text>
+                      {!!friend.phone && <Text style={styles.friendPhone}>{friend.phone}</Text>}
                     </View>
                     {selected && <Text style={styles.checkmark}>✓</Text>}
                   </TouchableOpacity>
@@ -1425,6 +1550,39 @@ const styles = StyleSheet.create({
   bannerTextAlert: { color: RED },
   bannerTextInfo:  { color: BLUE_INFO },
 
+  panicFlashOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#B00020',
+    zIndex: 9999,
+  },
+  panicFlashInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  panicFlashTitle: {
+    color: 'white',
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  panicFlashWho: {
+    marginTop: 10,
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+
   // ── Top bar ──────────────────────────────────────────────
   topBar: {
     position: 'absolute',
@@ -1594,6 +1752,7 @@ const styles = StyleSheet.create({
 
   // ── Friends list ─────────────────────────────────────────
   friendsHeader: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 8, marginTop: 4 },
+  emptyFriendsText: { fontSize: 12, color: '#999', textAlign: 'center', paddingVertical: 10 },
   friendRow: {
     flexDirection: 'row',
     alignItems: 'center',

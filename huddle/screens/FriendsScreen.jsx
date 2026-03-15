@@ -1,30 +1,18 @@
 
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, FlatList, Button, Modal, TouchableOpacity, Alert } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useIsFocused } from "@react-navigation/native";
 import Card from "./Card";
 import { supabase } from "../services/supabase";
 import HuddleModal from "./HuddleModal";
 
+const makeAvatarUrl = (name) => {
+    const safe = encodeURIComponent(name || "Friend");
+    return `https://ui-avatars.com/api/?name=${safe}&background=fb7854&color=fff&size=128&bold=true`;
+};
 
-const DATA = [
-    {id: '1', name: 'John Doe', description: 'Ex Slave master', imageUrl: 'https://cdn.discordapp.com/attachments/958149818503544882/1482484589648675029/hu.png?ex=69b71edd&is=69b5cd5d&hm=e4d371eeec964f4e8091d43a06e5d057579bab2e13cdc63a8225a6e34b9faf64&'},
-    {id: '2', name: 'Jane Smith', description: 'Software Engineer', imageUrl: 'https://cdn.discordapp.com/attachments/958149818503544882/1482484589648675029/hu.png?ex=69b71edd&is=69b5cd5d&hm=e4d371eeec964f4e8091d43a06e5d057579bab2e13cdc63a8225a6e34b9faf64&'},
-    {id: '3', name: 'Bob Johnson', description: 'Graphic Designer', imageUrl: 'https://cdn.discordapp.com/attachments/958149818503544882/1482484589648675029/hu.png?ex=69b71edd&is=69b5cd5d&hm=e4d371eeec964f4e8091d43a06e5d057579bab2e13cdc63a8225a6e34b9faf64&'}
-]
-
-const FRIEND_REQUESTS = [
-    {id: 'req1', name: 'Alice Johnson', description: 'Product Manager', imageUrl: 'https://cdn.discordapp.com/attachments/958149818503544882/1482484589648675029/hu.png?ex=69b71edd&is=69b5cd5d&hm=e4d371eeec964f4e8091d43a06e5d057579bab2e13cdc63a8225a6e34b9faf64&'},
-    {id: 'req2', name: 'Charlie Brown', description: 'UX Designer', imageUrl: 'https://cdn.discordapp.com/attachments/958149818503544882/1482484589648675029/hu.png?ex=69b71edd&is=69b5cd5d&hm=e4d371eeec964f4e8091d43a06e5d057579bab2e13cdc63a8225a6e34b9faf64&'}
-]
-
-const ITEM = ({name}) => (
-    <View style = {styles.item}>
-        <Text style={styles.friendText}>{name}</Text>
-    </View>
-);
-
-const RequestCard = ({ name, description, imageUrl, onAccept, onDecline }) => {
+const RequestCard = ({ name, description, onAccept, onDecline }) => {
     return (
         <View style={styles.requestCard}>
             <View style={styles.requestContent}>
@@ -45,18 +33,123 @@ const RequestCard = ({ name, description, imageUrl, onAccept, onDecline }) => {
 
 const FriendsScreen = () => {
     const [modalVisible, setModalVisible] = useState(false);
+    const [friends, setFriends] = useState([]);
+    const [requests, setRequests] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const isFocused = useIsFocused();
 
     const handleCardAction = (friendId) => {
         console.log('Action pressed for friend:', friendId);
         // Add your action handler here
     };
 
-    const handleAccept = (requestId) => {
-        console.log('Accepted friend request:', requestId);
+    const loadFriendsAndRequests = useCallback(async () => {
+        setLoading(true);
+        try {
+            const { data: userData, error: userError } = await supabase.auth.getUser();
+            if (userError) throw userError;
+            const user = userData?.user;
+            if (!user) {
+                setFriends([]);
+                setRequests([]);
+                return;
+            }
+
+            const userId = user.id;
+            const { data: rows, error } = await supabase
+                .from('friends')
+                .select('id, user_id, friend_id, status, action_user_id, created_at, updated_at')
+                .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+                .limit(500);
+
+            if (error) throw error;
+
+            const incoming = (rows || []).filter(r => r.status === 'pending' && r.friend_id === userId);
+            const accepted = (rows || []).filter(r => r.status === 'accepted');
+
+            const profileIds = Array.from(new Set([
+                ...incoming.map(r => r.user_id),
+                ...accepted.map(r => (r.user_id === userId ? r.friend_id : r.user_id)),
+            ].filter(Boolean)));
+
+            let profilesById = new Map();
+            if (profileIds.length > 0) {
+                const { data: profiles, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('id, username, full_name, avatar_initials, avatar_url')
+                    .in('id', profileIds);
+
+                if (profilesError) throw profilesError;
+                profilesById = new Map((profiles || []).map(p => [p.id, p]));
+            }
+
+            const requestUi = incoming.map(r => {
+                const p = profilesById.get(r.user_id);
+                const name = p?.username || p?.full_name || 'Member';
+                return {
+                    id: r.id,
+                    from_user_id: r.user_id,
+                    name,
+                    description: 'sent you a friend request',
+                };
+            });
+
+            const friendsUi = accepted.map(r => {
+                const otherId = r.user_id === userId ? r.friend_id : r.user_id;
+                const p = profilesById.get(otherId);
+                const name = p?.username || p?.full_name || 'Friend';
+                const description = 'Friend';
+                const imageUrl = p?.avatar_url || makeAvatarUrl(name);
+                return { id: otherId, name, description, imageUrl };
+            });
+
+            setRequests(requestUi);
+            setFriends(friendsUi);
+        } catch (e) {
+            console.log('Friends load error:', e?.message ?? e);
+            setFriends([]);
+            setRequests([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!isFocused) return;
+        void loadFriendsAndRequests();
+    }, [isFocused, loadFriendsAndRequests]);
+
+    const handleAccept = async (requestRowId) => {
+        try {
+            const { data: userData, error: userError } = await supabase.auth.getUser();
+            if (userError) throw userError;
+            const userId = userData?.user?.id;
+            if (!userId) throw new Error('Not signed in');
+
+            const { error } = await supabase
+                .from('friends')
+                .update({ status: 'accepted', action_user_id: userId, updated_at: new Date().toISOString() })
+                .eq('id', requestRowId);
+
+            if (error) throw error;
+            void loadFriendsAndRequests();
+        } catch (e) {
+            Alert.alert('Error', e?.message ?? 'Could not accept request');
+        }
     };
 
-    const handleDecline = (requestId) => {
-        console.log('Declined friend request:', requestId);
+    const handleDecline = async (requestRowId) => {
+        try {
+            const { error } = await supabase
+                .from('friends')
+                .delete()
+                .eq('id', requestRowId);
+
+            if (error) throw error;
+            void loadFriendsAndRequests();
+        } catch (e) {
+            Alert.alert('Error', e?.message ?? 'Could not decline request');
+        }
     };
 
     return (
@@ -68,15 +161,14 @@ const FriendsScreen = () => {
                 
                 <ScrollView style={styles.scrollView}>
                     {/* Friend Requests Section */}
-                    {FRIEND_REQUESTS.length > 0 && (
+                    {requests.length > 0 && (
                         <View style={styles.sectionContainer}>
                             <Text style={styles.sectionTitle}>Friend Requests</Text>
-                            {FRIEND_REQUESTS.map((request) => (
+                            {requests.map((request) => (
                                 <RequestCard
                                     key={request.id}
                                     name={request.name}
                                     description={request.description}
-                                    imageUrl={request.imageUrl}
                                     onAccept={() => handleAccept(request.id)}
                                     onDecline={() => handleDecline(request.id)}
                                 />
@@ -87,15 +179,21 @@ const FriendsScreen = () => {
                     {/* Friends List Section */}
                     <View style={styles.sectionContainer}>
                         <Text style={styles.sectionTitle}>Your Friends</Text>
-                        {DATA.map((friend) => (
-                            <Card 
-                                key={friend.id}
-                                name={friend.name} 
-                                description={friend.description} 
-                                imageUrl={friend.imageUrl} 
-                                onButtonPress={() => handleCardAction(friend.id)} 
-                            />
-                        ))}
+                        {loading ? (
+                            <Text style={styles.emptyText}>Loading...</Text>
+                        ) : friends.length === 0 ? (
+                            <Text style={styles.emptyText}>No friends yet.</Text>
+                        ) : (
+                            friends.map((friend) => (
+                                <Card
+                                    key={friend.id}
+                                    name={friend.name}
+                                    description={friend.description}
+                                    imageUrl={friend.imageUrl}
+                                    onButtonPress={() => handleCardAction(friend.id)}
+                                />
+                            ))
+                        )}
                     </View>
                 </ScrollView>
 
@@ -150,6 +248,13 @@ const styles = StyleSheet.create({
 
     friendText: {
         fontSize: 18,
+    },
+
+    emptyText: {
+        paddingHorizontal: 16,
+        color: '#777',
+        fontSize: 14,
+        marginTop: 6,
     },
 
     requestCard: {

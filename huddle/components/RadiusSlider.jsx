@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 
 const PURPLE = '#534AB7';
-const RADIUS_OPTIONS = [50, 100, 150, 300, 500];
+const RADIUS_OPTIONS = [0, 50, 100, 150, 300, 500];
 
 export default function RadiusSlider({ radius, onChange, disabled = false }) {
   return (
@@ -32,7 +32,7 @@ export default function RadiusSlider({ radius, onChange, disabled = false }) {
       {!disabled && (
         <Slider
           style={styles.slider}
-          minimumValue={50}
+          minimumValue={0}
           maximumValue={500}
           step={10}
           value={radius}

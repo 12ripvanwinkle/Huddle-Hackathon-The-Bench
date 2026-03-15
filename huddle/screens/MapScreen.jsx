@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Linking
+  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import {
   watchAndBroadcastLocation,
   getCurrentLocation,
   requestLocationPermission,
-  getDistanceMeters
 } from '../services/locationService';
 import {
   createSession,
@@ -21,7 +20,7 @@ import {
 } from '../services/huddleService';
 import RadiusSlider from '../components/RadiusSlider';
 
-// These must come AFTER all imports
+// Only load react-native-maps on mobile
 let MapView, Circle, Marker;
 if (Platform.OS !== 'web') {
   const Maps = require('react-native-maps');
@@ -34,11 +33,8 @@ const WebMap = Platform.OS === 'web'
   ? require('../components/WebMap').default
   : null;
 
-
-
 const PURPLE = '#534AB7';
 const RED = '#E24B4A';
-const GREEN = '#1D9E75';
 const BLUE_INFO = '#1A73E8';
 const BANNER_ALERT = 'alert';
 const BANNER_INFO = 'info';
@@ -59,36 +55,21 @@ export default function MapScreen({ session }) {
   const [selectedFriends, setSelectedFriends]       = useState([]);
   const [inviteSearch, setInviteSearch]             = useState('');
   const [banner, setBanner]                         = useState(null);
-  const bannerOpacity                               = useRef(new Animated.Value(0)).current;
-  const locationSubscription                        = useRef(null);
-  const realtimeSubscription                        = useRef(null);
-  const prevAlertCount                              = useRef(0);
 
-  
+  // Preview state
+  const [previewRadius, setPreviewRadius]           = useState(150);
+  const [previewCenter, setPreviewCenter]           = useState(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [addressInput, setAddressInput]             = useState('');
 
-  // Get current user profile
+  const bannerOpacity        = useRef(new Animated.Value(0)).current;
+  const locationSubscription = useRef(null);
+  const realtimeSubscription = useRef(null);
+  const prevAlertCount       = useRef(0);
+  const mapRef               = useRef(null);
+
   const userId = session?.user?.id;
 
-  // real friend fetch
-  const [friends, setFriends] = useState([]) //supabase data for friends list
-  
-  useEffect(() => {
-    fetchFriends()
-  }, [])
-  
-  async function fetchFriends() {
-    const {data, error} = await supabase
-      .from('friends')
-      .select('*')
-  
-    if (error) {
-      console.log("Error fetching friends:", error)
-    } else {
-      setFriends(data)
-    }
-  }
-
-  // Fake friends list for invite feature
   const FRIENDS_LIST = [
     { id: 'f1', name: 'Jordan Kim',   initials: 'JK', phone: '+1 555 0101' },
     { id: 'f2', name: 'Alex Morales', initials: 'AM', phone: '+1 555 0102' },
@@ -97,7 +78,6 @@ export default function MapScreen({ session }) {
   ];
 
   // ── Location setup ───────────────────────────────────────
-
   useEffect(() => {
     (async () => {
       const granted = await requestLocationPermission();
@@ -107,58 +87,37 @@ export default function MapScreen({ session }) {
       }
       const coords = await getCurrentLocation();
       setUserLocation(coords);
+      setPreviewCenter(coords); // set preview center to current location by default
     })();
 
-    // Cleanup on unmount
     return () => {
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-      }
-      if (realtimeSubscription.current) {
-        realtimeSubscription.current.unsubscribe();
-      }
+      if (locationSubscription.current) locationSubscription.current.remove();
+      if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
     };
   }, []);
 
-  // ── Start broadcasting location when session is active ───
-
+  // ── Start broadcasting location ──────────────────────────
   useEffect(() => {
     if (!huddleActive || !currentSession || !userLocation) return;
-
     const startTracking = async () => {
-      // Stop any existing subscription
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-      }
-
-      // Start watching and broadcasting location
+      if (locationSubscription.current) locationSubscription.current.remove();
       const sub = await watchAndBroadcastLocation(
-        currentSession.id,
-        userId,
-        currentSession.radius,
-        userLocation.latitude,
-        userLocation.longitude
+        currentSession.id, userId, currentSession.radius,
+        userLocation.latitude, userLocation.longitude
       );
       locationSubscription.current = sub;
     };
-
     startTracking();
   }, [huddleActive, currentSession]);
 
-  // ── Subscribe to real time member updates ────────────────
-
+  // ── Realtime member updates ──────────────────────────────
   useEffect(() => {
     if (!huddleActive || !currentSession) return;
-
-    // Load members initially
     loadMembers();
-
-    // Subscribe to live updates
     const sub = subscribeToSession(currentSession.id, (updatedMember) => {
       setMembers(prev => {
         const exists = prev.find(m => m.user_id === updatedMember.user_id);
         if (exists) {
-          // Merge but keep existing profile data since realtime doesn't include it
           return prev.map(m =>
             m.user_id === updatedMember.user_id
               ? { ...m, ...updatedMember, username: m.username, avatar_initials: m.avatar_initials }
@@ -168,40 +127,14 @@ export default function MapScreen({ session }) {
         return [...prev, updatedMember];
       });
     });
-
     realtimeSubscription.current = sub;
-
     return () => sub.unsubscribe();
   }, [huddleActive, currentSession]);
-  
-  // ── DEEP LINK HANDLER ──
-  useEffect(() => {
-    // Function to process a URL and show join modal
-    const handleUrl = (url) => {
-      const code = url.split('/').pop(); // take last part of the URL
-      setJoinCodeInput(code);
-      setShowJoinModal(true);
-    };
-
-    // Check if app opened from a link (cold start)
-    const getInitialLink = async () => {
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) handleUrl(initialUrl);
-    };
-    getInitialLink();
-
-    // Listen for links while app is running
-    const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
-
-    // Clean up listener on unmount
-    return () => subscription.remove();
-  }, []);
 
   const loadMembers = async () => {
     if (!currentSession) return;
     try {
       const data = await getSessionMembers(currentSession.id);
-      // Flatten profile data onto each member for easy access
       const enriched = data.map(m => ({
         ...m,
         username: m.profiles?.username || 'Member',
@@ -214,7 +147,6 @@ export default function MapScreen({ session }) {
   };
 
   // ── Banner ───────────────────────────────────────────────
-
   const showBanner = (message, type) => {
     setBanner({ message, type });
     Animated.sequence([
@@ -225,34 +157,41 @@ export default function MapScreen({ session }) {
   };
 
   // ── Alert detection ──────────────────────────────────────
-
   useEffect(() => {
     if (!huddleActive || !userLocation) return;
-    const alertMembers = members.filter(m =>
-      m.status === 'alert' && m.user_id !== userId
-    );
+    const alertMembers = members.filter(m => m.status === 'alert' && m.user_id !== userId);
     if (alertMembers.length > prevAlertCount.current) {
-      const names = alertMembers.map(m =>
-        m.profiles?.username || 'Someone'
-      ).join(', ');
+      const names = alertMembers.map(m => m.profiles?.username || 'Someone').join(', ');
       showBanner(`⚠️ ${names} left the huddle zone`, BANNER_ALERT);
     }
     prevAlertCount.current = alertMembers.length;
   }, [members]);
 
   // ── Session actions ──────────────────────────────────────
-
   const handleCreateHuddle = async () => {
     if (!sessionName.trim()) {
       Alert.alert('Name required', 'Please enter a session name.');
       return;
     }
+    const center = previewCenter || userLocation;
+    if (!center) {
+      Alert.alert('Location needed', 'Please wait for your location to load.');
+      return;
+    }
     try {
-      const newSession = await createSession(sessionName, userId, radius);
-      setCurrentSession(newSession);
+      const newSession = await createSession(sessionName, userId, previewRadius);
+      setCurrentSession({
+        ...newSession,
+        centerLat: center.latitude,
+        centerLng: center.longitude,
+      });
+      setRadius(previewRadius);
       setHuddleActive(true);
       setIsHost(true);
       setShowCreateModal(false);
+      setPreviewCenter(null);
+      setShowLocationPicker(false);
+      setAddressInput('');
       Alert.alert('Huddle Created! 🎉', `Share this code:\n\n${newSession.id}`);
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -279,90 +218,71 @@ export default function MapScreen({ session }) {
   };
 
   const handleLeaveSession = () => {
-    Alert.alert(
-      'Leave Session',
-      "You'll be removed from the huddle. The group will see a quiet notice.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave', style: 'destructive',
-          onPress: async () => {
-            try {
-              await leaveSession(currentSession.id, userId);
-              if (locationSubscription.current) locationSubscription.current.remove();
-              if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
-              setShowSessionModal(false);
-              setHuddleActive(false);
-              setIsHost(false);
-              setCurrentSession(null);
-              setSessionName('');
-              setMembers([]);
-              prevAlertCount.current = 0;
-            } catch (e) {
-              Alert.alert('Error', e.message);
-            }
-          },
+    Alert.alert('Leave Session', "You'll be removed from the huddle.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave', style: 'destructive',
+        onPress: async () => {
+          try {
+            await leaveSession(currentSession.id, userId);
+            if (locationSubscription.current) locationSubscription.current.remove();
+            if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
+            setShowSessionModal(false);
+            setHuddleActive(false);
+            setIsHost(false);
+            setCurrentSession(null);
+            setSessionName('');
+            setMembers([]);
+            prevAlertCount.current = 0;
+          } catch (e) { Alert.alert('Error', e.message); }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleEndHuddle = () => {
-    Alert.alert(
-      'End Huddle',
-      'This will end the session for all members. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End for Everyone', style: 'destructive',
-          onPress: async () => {
-            try {
-              await endSession(currentSession.id);
-              if (locationSubscription.current) locationSubscription.current.remove();
-              if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
-              setShowSessionModal(false);
-              setHuddleActive(false);
-              setIsHost(false);
-              setCurrentSession(null);
-              setSessionName('');
-              setMembers([]);
-              prevAlertCount.current = 0;
-            } catch (e) {
-              Alert.alert('Error', e.message);
-            }
-          },
+    Alert.alert('End Huddle', 'This will end the session for all members.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'End for Everyone', style: 'destructive',
+        onPress: async () => {
+          try {
+            await endSession(currentSession.id);
+            if (locationSubscription.current) locationSubscription.current.remove();
+            if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
+            setShowSessionModal(false);
+            setHuddleActive(false);
+            setIsHost(false);
+            setCurrentSession(null);
+            setSessionName('');
+            setMembers([]);
+            prevAlertCount.current = 0;
+          } catch (e) { Alert.alert('Error', e.message); }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   // ── Invite ───────────────────────────────────────────────
-
   const shareCode = async () => {
     try {
       await Share.share({
-        message: `Join my Huddle session "${sessionName}"!\n\nCode: ${currentSession?.id}\n\nDownload Huddle to stay safe together 🤝`,
+        message: `Join my Huddle session "${sessionName}"!\n\nCode: ${currentSession?.id}\n\nDownload Huddle to stay safe 🤝`,
       });
-    } catch (e) {
-      Alert.alert('Could not share', e.message);
-    }
+    } catch (e) { Alert.alert('Could not share', e.message); }
   };
 
   const shareLink = async () => {
     try {
       await Share.share({
-        message: `Join my Huddle session "${sessionName}"!\n\nhttps://huddle.app/join/${currentSession?.id}\n\nOr enter code: ${currentSession?.id}`,
+        message: `Join my Huddle!\n\nhttps://huddle.app/join/${currentSession?.id}\n\nOr enter code: ${currentSession?.id}`,
       });
-    } catch (e) {
-      Alert.alert('Could not share', e.message);
-    }
+    } catch (e) { Alert.alert('Could not share', e.message); }
   };
 
   const toggleFriendSelect = (friendId) => {
     setSelectedFriends(prev =>
-      prev.includes(friendId)
-        ? prev.filter(id => id !== friendId)
-        : [...prev, friendId]
+      prev.includes(friendId) ? prev.filter(id => id !== friendId) : [...prev, friendId]
     );
   };
 
@@ -371,10 +291,8 @@ export default function MapScreen({ session }) {
       Alert.alert('No friends selected', 'Tap friends to select them first.');
       return;
     }
-    const names = FRIENDS_LIST
-      .filter(f => selectedFriends.includes(f.id))
-      .map(f => f.name).join(', ');
-    Alert.alert('Invites Sent! 📨', `Invited: ${names}\n\nThey'll receive code: ${currentSession?.id}`);
+    const names = FRIENDS_LIST.filter(f => selectedFriends.includes(f.id)).map(f => f.name).join(', ');
+    Alert.alert('Invites Sent! 📨', `Invited: ${names}\n\nCode: ${currentSession?.id}`);
     setSelectedFriends([]);
     setShowInviteModal(false);
   };
@@ -383,79 +301,16 @@ export default function MapScreen({ session }) {
     f.name.toLowerCase().includes(inviteSearch.toLowerCase())
   );
 
-  // ── Map HTML ─────────────────────────────────────────────
-
-  const buildMapHTML = (lat, lng) => {
-    // Build real member markers from Supabase data
-    const memberMarkers = huddleActive ? members
-      .filter(m => m.latitude && m.longitude && m.user_id !== userId)
-      .map(m => {
-        const outside = m.status === 'alert';
-        const color = outside ? '#E24B4A' : '#534AB7';
-        const name = m.profiles?.username || m.username || m.name || 'Member';
-        return `
-          L.circleMarker([${m.latitude}, ${m.longitude}], {
-            radius: 14, fillColor: '${color}',
-            color: 'white', weight: 2, fillOpacity: 1
-          })
-          .bindPopup('<b>${name}</b><br>${outside ? '⚠️ Outside zone' : '✅ In zone'}')
-          .addTo(map);
-        `;
-      }).join('') : '';
-
-    const radiusCircle = huddleActive ? `
-      L.circle([${lat}, ${lng}], {
-        radius: ${radius},
-        color: '#534AB7', fillColor: '#534AB7',
-        fillOpacity: 0.12, weight: 2, dashArray: '6, 4'
-      }).addTo(map);
-    ` : '';
-
-    return `
-      <!DOCTYPE html><html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>
-          * { margin:0; padding:0; box-sizing:border-box; }
-          html, body, #map { width:100%; height:100%; }
-        </style>
-      </head>
-      <body><div id="map"></div>
-      <script>
-        var map = L.map('map', { zoomControl: true }).setView([${lat}, ${lng}], 16);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors', maxZoom: 19
-        }).addTo(map);
-
-        var youIcon = L.divIcon({
-          html: '<div style="width:16px;height:16px;border-radius:50%;background:#534AB7;border:3px solid white;box-shadow:0 0 6px rgba(0,0,0,0.3)"></div>',
-          iconSize: [16,16], iconAnchor: [8,8], className: ''
-        });
-        L.marker([${lat}, ${lng}], { icon: youIcon })
-          .bindPopup('<b>You</b>').addTo(map);
-
-        ${radiusCircle}
-        ${memberMarkers}
-      </script></body></html>
-    `;
-  };
-
-  // ── Active members count ─────────────────────────────────
-
   const activeMembers = members.filter(m => m.status !== 'left');
   const alertMembers  = members.filter(m => m.status === 'alert');
 
-  // ── Render ───────────────────────────────────────────────
-  // ADD THIS
-  console.log('Platform:', Platform.OS);
-  console.log('Maps key:', process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
+  // preview center to use
+  const activePrevCenter = previewCenter || userLocation;
+
   return (
-    
     <View style={styles.container}>
 
-      {/* Map */}
+      {/* ── MAP ── */}
       {userLocation ? (
         Platform.OS === 'web' ? (
           <div style={{ flex: 1, width: '100%', height: '100%' }}>
@@ -465,32 +320,50 @@ export default function MapScreen({ session }) {
               radius={radius}
               huddleActive={huddleActive}
               userId={userId}
+              previewMode={showCreateModal}
+              previewRadius={previewRadius}
+              previewCenter={activePrevCenter}
             />
           </div>
         ) : (
           <MapView
+            ref={mapRef}
             style={styles.map}
             initialRegion={{
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
+              latitudeDelta: 0.001,
+              longitudeDelta: 0.001,
             }}
             showsUserLocation
             showsMyLocationButton
           >
+            {/* Active session circle */}
             {huddleActive && (
               <Circle
-                center={{
-                  latitude: userLocation.latitude,
-                  longitude: userLocation.longitude,
-                }}
+                center={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
                 radius={radius}
-                fillColor="rgba(83, 74, 183, 0.12)"
-                strokeColor="rgba(83, 74, 183, 0.6)"
+                fillColor="rgba(83,74,183,0.12)"
+                strokeColor="rgba(83,74,183,0.6)"
                 strokeWidth={2}
               />
             )}
+
+            {/* ✨ PREVIEW CIRCLE — shows when create modal is open */}
+            {showCreateModal && activePrevCenter && (
+              <Circle
+                center={{
+                  latitude: activePrevCenter.latitude,
+                  longitude: activePrevCenter.longitude,
+                }}
+                radius={previewRadius}
+                fillColor="rgba(83,74,183,0.15)"
+                strokeColor="#534AB7"
+                strokeWidth={2}
+              />
+            )}
+
+            {/* Member markers */}
             {huddleActive && members
               .filter(m => m.latitude && m.longitude && m.user_id !== userId)
               .map(m => (
@@ -541,7 +414,6 @@ export default function MapScreen({ session }) {
             <TouchableOpacity style={styles.gearBtn} onPress={() => setShowSessionModal(true)}>
               <Text style={styles.gearIcon}>⚙️</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.gearBtn} onPress={loadMembers}>
               <Text style={styles.gearIcon}>🔄</Text>
             </TouchableOpacity>
@@ -552,11 +424,7 @@ export default function MapScreen({ session }) {
       {/* Bottom panel */}
       {huddleActive && (
         <View style={styles.bottomPanel}>
-          <RadiusSlider
-            radius={radius}
-            onChange={setRadius}
-            disabled={!isHost}
-          />
+          <RadiusSlider radius={radius} onChange={setRadius} disabled={!isHost} />
           <View style={styles.bottomRow}>
             <View style={styles.codeChip}>
               <Text style={styles.codeText}>Code: {currentSession?.id}</Text>
@@ -568,12 +436,8 @@ export default function MapScreen({ session }) {
               </Text>
             </View>
           </View>
-
           {isHost && (
-            <TouchableOpacity
-              style={styles.inviteBtn}
-              onPress={() => setShowInviteModal(true)}
-            >
+            <TouchableOpacity style={styles.inviteBtn} onPress={() => setShowInviteModal(true)}>
               <Text style={styles.inviteBtnText}>➕ Invite Members</Text>
             </TouchableOpacity>
           )}
@@ -596,15 +460,9 @@ export default function MapScreen({ session }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Session Options</Text>
-            <Text style={styles.sessionInfo}>
-              {currentSession?.name} · {activeMembers.length} members
-            </Text>
-
+            <Text style={styles.sessionInfo}>{currentSession?.name} · {activeMembers.length} members</Text>
             {isHost && (
-              <TouchableOpacity
-                style={styles.inviteOptionBtn}
-                onPress={() => { setShowSessionModal(false); setShowInviteModal(true); }}
-              >
+              <TouchableOpacity style={styles.inviteOptionBtn} onPress={() => { setShowSessionModal(false); setShowInviteModal(true); }}>
                 <Text style={styles.inviteOptionIcon}>➕</Text>
                 <View style={styles.inviteOptionText}>
                   <Text style={styles.inviteOptionTitle}>Invite Members</Text>
@@ -612,19 +470,16 @@ export default function MapScreen({ session }) {
                 </View>
               </TouchableOpacity>
             )}
-
             <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveSession}>
               <Text style={styles.leaveBtnText}>🚶 Leave Session</Text>
               <Text style={styles.leaveBtnSub}>Others stay. They'll see a quiet notice.</Text>
             </TouchableOpacity>
-
             {isHost && (
               <TouchableOpacity style={styles.endBtn} onPress={handleEndHuddle}>
                 <Text style={styles.endBtnText}>🛑 End Huddle for Everyone</Text>
                 <Text style={styles.endBtnSub}>Dissolves the session for all members.</Text>
               </TouchableOpacity>
             )}
-
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSessionModal(false)}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
@@ -638,7 +493,6 @@ export default function MapScreen({ session }) {
           <View style={[styles.modalCard, { maxHeight: '85%' }]}>
             <Text style={styles.modalTitle}>Invite Members</Text>
             <Text style={styles.sessionInfo}>Code: {currentSession?.id}</Text>
-
             <TouchableOpacity style={styles.inviteOptionBtn} onPress={shareCode}>
               <Text style={styles.inviteOptionIcon}>📤</Text>
               <View style={styles.inviteOptionText}>
@@ -646,7 +500,6 @@ export default function MapScreen({ session }) {
                 <Text style={styles.inviteOptionSub}>Send via WhatsApp, SMS, or any app</Text>
               </View>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.inviteOptionBtn} onPress={shareLink}>
               <Text style={styles.inviteOptionIcon}>🔗</Text>
               <View style={styles.inviteOptionText}>
@@ -654,29 +507,15 @@ export default function MapScreen({ session }) {
                 <Text style={styles.inviteOptionSub}>Send a tap-to-join link</Text>
               </View>
             </TouchableOpacity>
-
-            <Text style={styles.friendsHeader}>
-              Select Friends {selectedFriends.length > 0 && `(${selectedFriends.length})`}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Search friends..."
-              value={inviteSearch}
-              onChangeText={setInviteSearch}
-            />
+            <Text style={styles.friendsHeader}>Select Friends {selectedFriends.length > 0 && `(${selectedFriends.length})`}</Text>
+            <TextInput style={styles.input} placeholder="Search friends..." value={inviteSearch} onChangeText={setInviteSearch} />
             <ScrollView style={{ maxHeight: 200 }}>
               {filteredFriends.map(friend => {
                 const selected = selectedFriends.includes(friend.id);
                 return (
-                  <TouchableOpacity
-                    key={friend.id}
-                    style={[styles.friendRow, selected && styles.friendRowSelected]}
-                    onPress={() => toggleFriendSelect(friend.id)}
-                  >
+                  <TouchableOpacity key={friend.id} style={[styles.friendRow, selected && styles.friendRowSelected]} onPress={() => toggleFriendSelect(friend.id)}>
                     <View style={[styles.friendAvatar, { backgroundColor: selected ? PURPLE : '#E0E0E0' }]}>
-                      <Text style={[styles.friendAvatarText, { color: selected ? 'white' : '#666' }]}>
-                        {friend.initials}
-                      </Text>
+                      <Text style={[styles.friendAvatarText, { color: selected ? 'white' : '#666' }]}>{friend.initials}</Text>
                     </View>
                     <View style={styles.friendInfo}>
                       <Text style={styles.friendName}>{friend.name}</Text>
@@ -687,18 +526,12 @@ export default function MapScreen({ session }) {
                 );
               })}
             </ScrollView>
-
             {selectedFriends.length > 0 && (
               <TouchableOpacity style={styles.primaryBtn} onPress={sendFriendInvites}>
                 <Text style={styles.primaryBtnText}>Send Invites ({selectedFriends.length})</Text>
               </TouchableOpacity>
             )}
-
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => {
-              setShowInviteModal(false);
-              setSelectedFriends([]);
-              setInviteSearch('');
-            }}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowInviteModal(false); setSelectedFriends([]); setInviteSearch(''); }}>
               <Text style={styles.cancelBtnText}>Done</Text>
             </TouchableOpacity>
           </View>
@@ -707,28 +540,136 @@ export default function MapScreen({ session }) {
 
       {/* ══ CREATE MODAL ══ */}
       <Modal visible={showCreateModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Create Huddle Session</Text>
-            <Text style={styles.modalLabel}>Session name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Coachella Squad"
-              value={sessionName}
-              onChangeText={setSessionName}
-            />
-            <Text style={styles.modalLabel}>Starting radius: {radius}m</Text>
-            <RadiusSlider radius={radius} onChange={setRadius} disabled={false} />
-            <TouchableOpacity 
-              style={[styles.primaryBtn, !sessionName.trim() && styles.primaryBtnDisabled]} 
-              onPress={handleCreateHuddle}
-              disabled={!sessionName.trim()}
-            >
-              <Text style={styles.primaryBtnText}>Create & Get Code</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
+        <View style={styles.createModalOverlay}>
+          <View style={styles.createModalCard}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Create Huddle Session</Text>
+
+              <Text style={styles.modalLabel}>Session name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Coachella Squad"
+                value={sessionName}
+                onChangeText={setSessionName}
+              />
+
+              {/* Location picker */}
+              <Text style={styles.modalLabel}>Huddle center</Text>
+              <View style={styles.locationOptions}>
+                <TouchableOpacity
+                  style={[styles.locationOption, !showLocationPicker && styles.locationOptionActive]}
+                  onPress={() => {
+                    setShowLocationPicker(false);
+                    setPreviewCenter(userLocation);
+                  }}
+                >
+                  <Text style={[styles.locationOptionText, !showLocationPicker && styles.locationOptionTextActive]}>
+                    📍 Current
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.locationOption, showLocationPicker === 'address' && styles.locationOptionActive]}
+                  onPress={() => setShowLocationPicker('address')}
+                >
+                  <Text style={[styles.locationOptionText, showLocationPicker === 'address' && styles.locationOptionTextActive]}>
+                    🔍 Address
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.locationOption, showLocationPicker === 'drag' && styles.locationOptionActive]}
+                  onPress={() => setShowLocationPicker('drag')}
+                >
+                  <Text style={[styles.locationOptionText, showLocationPicker === 'drag' && styles.locationOptionTextActive]}>
+                    📌 Pin
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Address search */}
+              {showLocationPicker === 'address' && (
+                <View style={styles.addressRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0, marginRight: 8 }]}
+                    placeholder="Enter address or place..."
+                    value={addressInput}
+                    onChangeText={setAddressInput}
+                  />
+                  <TouchableOpacity
+                    style={styles.goBtn}
+                    onPress={async () => {
+                      if (!addressInput.trim()) return;
+                      try {
+                        // Use Google Geocoding REST API (works on mobile too)
+                        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+                        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressInput)}&key=${apiKey}`;
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        if (data.status === 'OK' && data.results[0]) {
+                          const loc = data.results[0].geometry.location;
+                          setPreviewCenter({ latitude: loc.lat, longitude: loc.lng });
+                          // Pan map to new location
+                          if (mapRef.current) {
+                            mapRef.current.animateToRegion({
+                              latitude: loc.lat,
+                              longitude: loc.lng,
+                              latitudeDelta: 0.005,
+                              longitudeDelta: 0.005,
+                            }, 500);
+                          }
+                        } else {
+                          Alert.alert('Not found', 'Address not found. Try a different search.');
+                        }
+                      } catch (e) {
+                        Alert.alert('Error', 'Could not search address.');
+                      }
+                    }}
+                  >
+                    <Text style={styles.goBtnText}>Go</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Drag hint */}
+              {showLocationPicker === 'drag' && (
+                <View style={styles.dragHint}>
+                  <Text style={styles.dragHintText}>
+                    📌 Close this modal, tap anywhere on the map to place your pin, then tap + again
+                  </Text>
+                </View>
+              )}
+
+              {/* Preview info */}
+              <View style={styles.previewInfo}>
+                <Text style={styles.previewInfoText}>
+                  👁 Radius circle previewing on map · {previewRadius}m
+                </Text>
+              </View>
+
+              {/* Radius */}
+              <Text style={styles.modalLabel}>Radius: {previewRadius}m</Text>
+              <RadiusSlider
+                radius={previewRadius}
+                onChange={(r) => {
+                  setPreviewRadius(r);
+                }}
+                disabled={false}
+              />
+
+              <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateHuddle}>
+                <Text style={styles.primaryBtnText}>Create & Get Code</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setPreviewCenter(null);
+                  setShowLocationPicker(false);
+                  setAddressInput('');
+                }}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -762,128 +703,282 @@ export default function MapScreen({ session }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map: { flex: 1 },
-  loadingMap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e8f0e8' },
+
+  // ── Layout ───────────────────────────────────────────────
+  container:   { flex: 1 },
+  map:         { flex: 1 },
+  loadingMap:  { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e8f0e8' },
   loadingText: { fontSize: 16, color: '#666' },
 
+  // ── Alert banner ─────────────────────────────────────────
   banner: {
-    position: 'absolute', top: 120, left: 16, right: 16,
-    borderRadius: 10, padding: 12, borderWidth: 0.5,
+    position: 'absolute',
+    top: 120, left: 16, right: 16,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 0.5,
   },
-  bannerAlert: { backgroundColor: '#FEECEC', borderColor: RED },
-  bannerInfo:  { backgroundColor: '#E8F0FE', borderColor: BLUE_INFO },
-  bannerText:  { fontSize: 13, textAlign: 'center', fontWeight: '500' },
+  bannerAlert:     { backgroundColor: '#FEECEC', borderColor: RED },
+  bannerInfo:      { backgroundColor: '#E8F0FE', borderColor: BLUE_INFO },
+  bannerText:      { fontSize: 13, textAlign: 'center', fontWeight: '500' },
   bannerTextAlert: { color: RED },
   bannerTextInfo:  { color: BLUE_INFO },
 
+  // ── Top bar ──────────────────────────────────────────────
   topBar: {
-    position: 'absolute', top: 60, left: 16, right: 16,
-    backgroundColor: 'white', borderRadius: 12, padding: 12,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
+    position: 'absolute',
+    top: 60, left: 16, right: 16,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  topBarTitle:  { fontWeight: '600', fontSize: 15, color: '#222' },
-  hostBadge:    { fontSize: 11, color: '#888', marginTop: 2 },
-  topBarRight:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  inviteChip:   { backgroundColor: '#EEEDFE', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  topBarTitle: { fontWeight: '600', fontSize: 15, color: '#222' },
+  hostBadge:   { fontSize: 11, color: '#888', marginTop: 2 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inviteChip:  {
+    backgroundColor: '#EEEDFE',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   inviteChipText: { color: PURPLE, fontSize: 13, fontWeight: '500' },
   gearBtn:  { padding: 4 },
   gearIcon: { fontSize: 20 },
 
+  // ── Bottom panel ─────────────────────────────────────────
   bottomPanel: {
-    position: 'absolute', bottom: 70, left: 0, right: 0,
-    backgroundColor: 'white', padding: 16,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 8,
+    position: 'absolute',
+    bottom: 70, left: 0, right: 0,
+    backgroundColor: 'white',
+    padding: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
   },
   bottomRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   codeChip: {
-    flex: 1, backgroundColor: '#F5F4FF', borderRadius: 8, padding: 8,
-    alignItems: 'center', borderWidth: 0.5, borderColor: '#AFA9EC',
+    flex: 1,
+    backgroundColor: '#F5F4FF',
+    borderRadius: 8,
+    padding: 8,
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#AFA9EC',
   },
   codeText: { color: PURPLE, fontSize: 13, fontWeight: '500' },
   membersChip: {
-    flex: 1, backgroundColor: '#F5F4FF', borderRadius: 8, padding: 8,
-    alignItems: 'center', borderWidth: 0.5, borderColor: '#AFA9EC',
-  },
-  membersText: { color: PURPLE, fontSize: 13, fontWeight: '500' },
-
-  inviteBtn: {
-    backgroundColor: PURPLE, borderRadius: 10, padding: 12,
+    flex: 1,
+    backgroundColor: '#F5F4FF',
+    borderRadius: 8,
+    padding: 8,
     alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#AFA9EC',
   },
+  membersText:   { color: PURPLE, fontSize: 13, fontWeight: '500' },
+  inviteBtn:     { backgroundColor: PURPLE, borderRadius: 10, padding: 12, alignItems: 'center' },
   inviteBtnText: { color: 'white', fontWeight: '600', fontSize: 14 },
 
+  // ── FAB & Join button ────────────────────────────────────
   fab: {
-    position: 'absolute', bottom: 320, right: 20,
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: PURPLE, justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
+    position: 'absolute',
+    bottom: 320, right: 20,
+    width: 52, height: 52,
+    borderRadius: 26,
+    backgroundColor: PURPLE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   fabText: { color: 'white', fontSize: 28, fontWeight: '300', marginTop: -2 },
-
   joinButton: {
-    position: 'absolute', bottom: 100, alignSelf: 'center',
-    backgroundColor: PURPLE, paddingHorizontal: 32, paddingVertical: 14,
-    borderRadius: 24, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    backgroundColor: PURPLE,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   joinButtonText: { color: 'white', fontWeight: '600', fontSize: 15 },
 
+  // ── Invite modal — options ───────────────────────────────
   inviteOptionBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 0.5, borderColor: '#E0E0E0',
-    borderRadius: 12, padding: 14, marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
   },
-  inviteOptionIcon: { fontSize: 24, marginRight: 12 },
-  inviteOptionText: { flex: 1 },
+  inviteOptionIcon:  { fontSize: 24, marginRight: 12 },
+  inviteOptionText:  { flex: 1 },
   inviteOptionTitle: { fontSize: 15, fontWeight: '500', color: '#222' },
   inviteOptionSub:   { fontSize: 12, color: '#999', marginTop: 2 },
 
+  // ── Friends list ─────────────────────────────────────────
   friendsHeader: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 8, marginTop: 4 },
   friendRow: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 10, borderRadius: 10, marginBottom: 6,
-    borderWidth: 0.5, borderColor: '#EBEBEB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 6,
+    borderWidth: 0.5,
+    borderColor: '#EBEBEB',
   },
   friendRowSelected: { borderColor: PURPLE, backgroundColor: '#F5F4FF' },
   friendAvatar: {
-    width: 38, height: 38, borderRadius: 19,
-    justifyContent: 'center', alignItems: 'center', marginRight: 10,
+    width: 38, height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   friendAvatarText: { fontWeight: '600', fontSize: 13 },
-  friendInfo: { flex: 1 },
-  friendName:  { fontSize: 14, fontWeight: '500', color: '#222' },
-  friendPhone: { fontSize: 12, color: '#999' },
-  checkmark: { fontSize: 16, color: PURPLE, fontWeight: '700' },
+  friendInfo:   { flex: 1 },
+  friendName:   { fontSize: 14, fontWeight: '500', color: '#222' },
+  friendPhone:  { fontSize: 12, color: '#999' },
+  checkmark:    { fontSize: 16, color: PURPLE, fontWeight: '700' },
 
+  // ── Session options modal ────────────────────────────────
   leaveBtn: {
-    borderWidth: 0.5, borderColor: '#DDD',
-    borderRadius: 12, padding: 14, marginBottom: 10,
+    borderWidth: 0.5,
+    borderColor: '#DDD',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
   },
   leaveBtnText: { fontSize: 15, fontWeight: '500', color: '#333', marginBottom: 4 },
   leaveBtnSub:  { fontSize: 12, color: '#999' },
   endBtn: {
-    borderWidth: 0.5, borderColor: RED, borderRadius: 12,
-    padding: 14, marginBottom: 10, backgroundColor: '#FFF8F8',
+    borderWidth: 0.5,
+    borderColor: RED,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: '#FFF8F8',
   },
   endBtnText: { fontSize: 15, fontWeight: '500', color: RED, marginBottom: 4 },
   endBtnSub:  { fontSize: 12, color: '#999' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  // ── Shared modal base styles ─────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
   modalTitle:  { fontSize: 18, fontWeight: '600', color: '#222', marginBottom: 4 },
   sessionInfo: { fontSize: 13, color: '#999', marginBottom: 16 },
   modalLabel:  { fontSize: 13, color: '#666', marginBottom: 6 },
   input: {
-    borderWidth: 0.5, borderColor: '#DDD', borderRadius: 10,
-    padding: 12, fontSize: 15, marginBottom: 12, color: '#222',
+    borderWidth: 0.5,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 12,
+    color: '#222',
   },
   primaryBtn: {
-    backgroundColor: PURPLE, borderRadius: 12, padding: 14,
-    alignItems: 'center', marginBottom: 10, marginTop: 8,
+    backgroundColor: PURPLE,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+    marginTop: 8,
   },
   primaryBtnText: { color: 'white', fontWeight: '600', fontSize: 15 },
-  cancelBtn:     { alignItems: 'center', padding: 10 },
-  cancelBtnText: { color: '#999', fontSize: 14 },
+  cancelBtn:      { alignItems: 'center', padding: 10 },
+  cancelBtnText:  { color: '#999', fontSize: 14 },
+
+  // ── Create modal (transparent overlay, map shows behind) ─
+  createModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+  },
+  createModalCard: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '75%',
+    elevation: 20,
+  },
+
+  // ── Location picker ──────────────────────────────────────
+  locationOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  locationOption: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: '#DDD',
+    backgroundColor: '#F9F9F9',
+    alignItems: 'center',
+  },
+  locationOptionActive:    { backgroundColor: '#EEEDFE', borderColor: PURPLE },
+  locationOptionText:      { fontSize: 12, color: '#666' },
+  locationOptionTextActive: { color: PURPLE, fontWeight: '600' },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  goBtn: {
+    backgroundColor: PURPLE,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  goBtnText: { color: 'white', fontWeight: '600', fontSize: 14 },
+
+  // ── Hints & preview ──────────────────────────────────────
+  dragHint: {
+    backgroundColor: '#EEEDFE',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  dragHintText: { color: PURPLE, fontSize: 12, textAlign: 'center' },
+  previewInfo: {
+    backgroundColor: '#F5F4FF',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 0.5,
+    borderColor: '#AFA9EC',
+  },
+  previewInfoText: { color: PURPLE, fontSize: 12, textAlign: 'center' },
+
 });

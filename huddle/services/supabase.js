@@ -1,24 +1,14 @@
-// NOTE: This file must export a working `supabase` client for the app to start.
-// Replace the stub below with your Supabase project URL + anon key, or provide
-// environment variables to keep secrets out of source control.
+import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Example (uncomment + fill in):
-// import { createClient } from '@supabase/supabase-js';
-// export const supabase = createClient(
-//   'https://<YOUR-PROJECT>.supabase.co',
-//   '<YOUR-ANON-KEY>'
-// );
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// --- STUB (safe default, no network) ---------------------------------
-// This lets the app boot without crashing even if you haven't configured
-// Supabase yet. It provides the same minimal API surface used in App.js.
-
-export const supabase = {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    getSession: async () => ({ data: { session: null } }),
-    onAuthStateChange: (_event, callback) => ({
-      data: { subscription: { unsubscribe: () => {} } },
-    }),
-    signOut: async () => ({}),
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
   },
-};
+});

@@ -17,12 +17,6 @@ import * as NavigationBar from 'expo-navigation-bar';
 // BACKEND CONNECTION: Supabase client
 // Supabase acts as the backend for authentication and possibly storing GPS data
 import { supabase } from './services/supabase';
-import MapScreen from './screens/MapScreen';
-import FriendsScreen from './screens/FriendsScreen';
-import AuthScreen from './screens/AuthScreen';
-
-const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
 
 // FRONTEND SCREENS (UI pages)
 import MapScreen from './screens/MapScreen';     // Screen that displays the GPS map
@@ -51,32 +45,18 @@ function BackButton({ onPress }) {
     <TouchableOpacity
       onPress={onPress}
       style={{
-        marginLeft: 16, width: 36, height: 36,
+        marginLeft: 16,
+        width: 36,
+        height: 36,
         borderRadius: 18,
         backgroundColor: 'rgba(255,255,255,0.15)',
-        justifyContent: 'center', alignItems: 'center',
+        justifyContent: 'center',
+        alignItems: 'center',
       }}
     >
       <Text style={{ fontSize: 20, color: 'white', marginTop: -2 }}>←</Text>
     </TouchableOpacity>
   );
-    return (
-        <TouchableOpacity
-            onPress={onPress}
-            style={{
-                marginLeft: 16,
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                justifyContent: 'center',
-                alignItems: 'center',
-            }}
-        >
-            {/* Icon placeholder */}
-            <Text style={{ fontSize: 20, color:'white', marginTop: -2}}></Text>
-        </TouchableOpacity>
-    );
 }
 
 
@@ -106,36 +86,6 @@ function MainTabs({ session }) {
       >
         {() => <MapScreen session={session} />}
       </Tab.Screen>
-    return (
-        <Tab.Navigator
-            screenOptions={{
-                tabBarActiveTintColor: PURPLE,
-                tabBarInactiveTintColor: '#999',
-
-                // FRONTEND: styling for bottom navigation
-                tabBarStyle: {
-                    height: 60,
-                    paddingBottom: 8,
-                    backgroundColor: 'white',
-                    borderTopWidth: 0.5,
-                    borderTopColor: '#EBEBEB',
-                    elevation: 10,
-                },
-
-                headerShown: false,
-            }}
-        >
-
-            {/* FRONTEND: Map tab */}
-            {/* This tap this and the screen would display the live GPS tracking map */}
-            <Tab.Screen
-                name="Map"
-                options={{
-                    tabBarIcon: ({ color }) => <Text style={{fontSize: 20, color}}>🗺️</Text>,
-                }}
-            >
-                {() => <MapScreen session={session} />}
-            </Tab.Screen>
 
       <Tab.Screen
         name="Friends"
@@ -161,36 +111,21 @@ function MainTabs({ session }) {
           ),
         }}
       />
+
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
+        }}
+      />
     </Tab.Navigator>
   );
-
-            {/* FRONTEND: Friends tab */}
-            {/* Shows group members whose GPS location may be shared */}
-            <Tab.Screen
-                name="Friends"
-                component={FriendsScreen}
-                options={{
-                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text>,
-                }}
-            />
-
-            <Tab.Screen
-                name="Profile"
-                component={ProfileScreen}
-                options={{
-                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
-                }}
-            />
-        </Tab.Navigator>
-    );
 }
 
 
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-
     // FRONTEND STATE MANAGEMENT
     // session stores the logged-in user from the backend
     const [session, setSession] = useState(null);
@@ -200,53 +135,32 @@ export default function App() {
 
 
   useEffect(() => {
+    // BACKEND: Check if user already has an active login session
+    // Supabase returns session data if user is authenticated
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
-    useEffect(() => {
 
-        // BACKEND: Check if user already has an active login session
-        // Supabase returns session data if user is authenticated
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setLoading(false);
-        });
+    // BACKEND: Listen for authentication changes
+    // This runs when a user logs in or logs out
+    const { data: { subscription } } =
+      supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+      });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => { setSession(session); }
-    );
-        // BACKEND: Listen for authentication changes
-        // This runs when a user logs in or logs out
-        const { data: { subscription } } =
-            supabase.auth.onAuthStateChange((_event, session) => {
-                setSession(session);
-            });
-
+    // Cleanup listener when component unmounts
     return () => subscription.unsubscribe();
   }, []);
-        // Cleanup listener when component unmounts
-        return () => subscription.unsubscribe();
-
-    }, []);
-
 
   useEffect(() => {
+    // FRONTEND (Android UI control)
+    // Hides the Android navigation bar for immersive full-screen map experience
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('hidden');
       NavigationBar.setButtonStyleAsync('light');
     }
   }, []);
-    useEffect(() => {
-
-        // FRONTEND (Android UI control)
-        // Hides the Android navigation bar for immersive full-screen map experience
-        if (Platform.OS === 'android') {
-            NavigationBar.setVisibilityAsync('hidden');
-            NavigationBar.setButtonStyleAsync('light');
-        }
-
-    }, []);
 
   if (loading) {
     return (
@@ -278,48 +192,35 @@ export default function App() {
 
   return (
     <>
+      {/* FRONTEND STATUS BAR */}
       <StatusBar style="dark" translucent backgroundColor="transparent" />
-      <NavigationContainer>
+
+      {/* FRONTEND APP NAVIGATION ROOT */}
+      <NavigationContainer linking={{ prefixes: [prefix] }}>
+
+        {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {session
-            ? <Stack.Screen name="Main">{() => <MainTabs session={session} />}</Stack.Screen>
-            : <Stack.Screen name="Auth" component={AuthScreen} />
-          }
+
+          {/* AUTH LOGIC */}
+          {/* If user is logged in → show main app (map + friends) */}
+          {/* If user not logged in → show login screen */}
+
+          {session ? (
+            // User is logged in → Main app
+            <Stack.Screen name="Main">
+              {() => <MainTabs session={session} />}
+            </Stack.Screen>
+          ) : (
+            // No session → show auth screens
+            <>
+              <Stack.Screen name="Auth" component={AuthScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+            </>
+          )}
+
         </Stack.Navigator>
+
       </NavigationContainer>
     </>
   );
-    return (
-        <>
-            {/* FRONTEND STATUS BAR */}
-            <StatusBar style="dark" translucent backgroundColor="transparent" />
-
-            {/* FRONTEND APP NAVIGATION ROOT */}
-            <NavigationContainer linking={{ prefixes:[prefix] }}>
-
-                {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
-
-                    {/* AUTH LOGIC */}
-                    {/* If user is logged in → show main app (map + friends) */}
-                    {/* If user not logged in → show login screen */}
-
-                    {session ? (
-                        // User is logged in → Main app
-                        <Stack.Screen name="Main">
-                            {() => <MainTabs session={session} />}
-                        </Stack.Screen>
-                    ) : (
-                        // No session → show auth screens
-                        <>
-                            <Stack.Screen name="Auth" component={AuthScreen} />
-                            <Stack.Screen name="Register" component={RegisterScreen} />
-                        </>
-                    )}
-
-                </Stack.Navigator>
-
-            </NavigationContainer>
-        </>
-    );
 }

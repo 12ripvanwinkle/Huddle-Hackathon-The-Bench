@@ -1,11 +1,21 @@
+
+// FRONTEND: React & React Native imports used to build the mobile UI
 import React, { useEffect, useState } from 'react';
+
+// FRONTEND: Navigation libraries used to move between screens in the app
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { Text, View, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
+
+// FRONTEND: UI components used to build the interface
+import { Text, TouchableOpacity, Platform, View, ActivityIndicator } from 'react-native';
+
+// FRONTEND: Expo UI utilities
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 
+// BACKEND CONNECTION: Supabase client
+// Supabase acts as the backend for authentication and possibly storing GPS data
 import { supabase } from './services/supabase';
 
 // FRONTEND SCREENS (UI pages)
@@ -13,20 +23,23 @@ import MapScreen from './screens/MapScreen';     // Screen that displays the GPS
 import FriendsScreen from './screens/FriendsScreen'; // Screen showing friends/group members
 import ProfileScreen from './screens/ProfileScreen'; // User profile screen
 import AuthScreen from './screens/AuthScreen';   // Login / signup screen
-import RegisterScreen from './screens/RegisterScreen'; // Screen for user registration
+import RegisterScreen from './screens/RegisterScreen';
 
 import * as Linking from 'expo-linking';
 const prefix = Linking.createURL('/');
-
 
 // FRONTEND NAVIGATION SETUP
 const Tab = createBottomTabNavigator();   // Bottom navigation tabs
 const Stack = createStackNavigator();     // Stack navigation for auth vs main app
 
 // FRONTEND DESIGN CONSTANT
+// FRONTEND DESIGN CONSTANT
 const PURPLE = '#534AB7';
 
-// Simple back button
+
+
+// FRONTEND COMPONENT
+// Simple reusable back button used in navigation headers
 function BackButton({ onPress }) {
     return (
         <TouchableOpacity
@@ -41,18 +54,24 @@ function BackButton({ onPress }) {
                 alignItems: 'center',
             }}
         >
-            <Text style={{ fontSize: 20, color:'white', marginTop: -2 }}>←</Text>
+            {/* Icon placeholder */}
+            <Text style={{ fontSize: 20, color:'white', marginTop: -2}}></Text>
         </TouchableOpacity>
     );
 }
 
-// Main tabs navigator
+
+
+// FRONTEND MAIN NAVIGATION
+// Bottom tabs for the core GPS tracking features
 function MainTabs({ session }) {
     return (
         <Tab.Navigator
             screenOptions={{
                 tabBarActiveTintColor: PURPLE,
                 tabBarInactiveTintColor: '#999',
+
+                // FRONTEND: styling for bottom navigation
                 tabBarStyle: {
                     height: 60,
                     paddingBottom: 8,
@@ -61,9 +80,13 @@ function MainTabs({ session }) {
                     borderTopColor: '#EBEBEB',
                     elevation: 10,
                 },
+
                 headerShown: false,
             }}
         >
+
+            {/* FRONTEND: Map tab */}
+            {/* This tap this and the screen would display the live GPS tracking map */}
             <Tab.Screen
                 name="Map"
                 options={{
@@ -73,6 +96,9 @@ function MainTabs({ session }) {
                 {() => <MapScreen session={session} />}
             </Tab.Screen>
 
+
+            {/* FRONTEND: Friends tab */}
+            {/* Shows group members whose GPS location may be shared */}
             <Tab.Screen
                 name="Friends"
                 component={FriendsScreen}
@@ -92,41 +118,55 @@ function MainTabs({ session }) {
     );
 }
 
-// Auth stack navigator
-function AuthStack() {
-    return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Auth" component={AuthScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-        </Stack.Navigator>
-    );
-}
 
-// Root navigation
+
 export default function App() {
+
+    // FRONTEND STATE MANAGEMENT
+    // session stores the logged-in user from the backend
     const [session, setSession] = useState(null);
+
+    // loading state while authentication is checked
     const [loading, setLoading] = useState(true);
 
+
     useEffect(() => {
+
+        // BACKEND: Check if user already has an active login session
+        // Supabase returns session data if user is authenticated
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
             setLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-        });
+        // BACKEND: Listen for authentication changes
+        // This runs when a user logs in or logs out
+        const { data: { subscription } } =
+            supabase.auth.onAuthStateChange((_event, session) => {
+                setSession(session);
+            });
 
+        // Cleanup listener when component unmounts
         return () => subscription.unsubscribe();
+
     }, []);
 
+
     useEffect(() => {
+
+        // FRONTEND (Android UI control)
+        // Hides the Android navigation bar for immersive full-screen map experience
         if (Platform.OS === 'android') {
             NavigationBar.setVisibilityAsync('hidden');
             NavigationBar.setButtonStyleAsync('light');
         }
+
     }, []);
 
+
+
+    // FRONTEND LOADING SCREEN
+    // Displayed while the app checks login status from backend
     if (loading) {
         return (
             <View
@@ -142,8 +182,11 @@ export default function App() {
         );
     }
 
+
+
     return (
         <>
+            {/* FRONTEND STATUS BAR */}
             <StatusBar style="dark" translucent backgroundColor="transparent" />
 
             {/* FRONTEND APP NAVIGATION ROOT */}
@@ -151,13 +194,26 @@ export default function App() {
 
                 {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
                 <Stack.Navigator screenOptions={{ headerShown: false }}>
-                    {session
-                        ? <Stack.Screen name="Main">
+
+                    {/* AUTH LOGIC */}
+                    {/* If user is logged in → show main app (map + friends) */}
+                    {/* If user not logged in → show login screen */}
+
+                    {session ? (
+                        // User is logged in → Main app
+                        <Stack.Screen name="Main">
                             {() => <MainTabs session={session} />}
                         </Stack.Screen>
-                        : <Stack.Screen name="AuthStack" component={AuthStack} />
-                    }
+                    ) : (
+                        // No session → show auth screens
+                        <>
+                            <Stack.Screen name="Auth" component={AuthScreen} />
+                            <Stack.Screen name="Register" component={RegisterScreen} />
+                        </>
+                    )}
+
                 </Stack.Navigator>
+
             </NavigationContainer>
         </>
     );

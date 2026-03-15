@@ -5,11 +5,13 @@ import {
   Alert, ActivityIndicator, StyleSheet
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabase';
 
-const PURPLE = '#534AB7';
+const PURPLE = '#fb7854';
 
 const AuthScreen = () => {
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,7 +67,7 @@ const AuthScreen = () => {
     <SafeAreaProvider>
       <View style={styles.container}>
         <Text style={styles.title}>Huddle 🤝</Text>
-        <Text style={styles.subtitle}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Welcome New User :D</Text>
 
         <TextInput
           style={styles.input}
@@ -99,7 +101,7 @@ const AuthScreen = () => {
 
         <TouchableOpacity
           style={styles.secondaryBtn}
-          onPress={() => Register()}
+          onPress={() => navigation.navigate('Register')}
           disabled={loading}
         >
           <Text style={styles.secondaryBtnText}>Sign Up</Text>

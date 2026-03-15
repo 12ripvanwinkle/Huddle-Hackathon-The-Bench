@@ -1,11 +1,7 @@
 {
   "name": "huddle",
   "version": "1.0.0",
-<<<<<<< HEAD
-  "main": "index.js",
-=======
   "main": "app/index.js",
->>>>>>> 337a461014d2bd0b85e3673444d0cb383badc532
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -39,16 +35,9 @@
     "react-native": "0.83.2",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-leaflet-view": "^1.1.2",
-<<<<<<< HEAD
-    "react-native-maps": "^1.27.2",
-    
-    "react-native-safe-area-context": "^5.6.2",
-    "react-native-screens": "^4.23.0",
-=======
     "react-native-maps": "1.26.20",
     "react-native-safe-area-context": "5.6.2",
     "react-native-screens": "4.23.0",
->>>>>>> 337a461014d2bd0b85e3673444d0cb383badc532
     "react-native-slider": "^0.11.0",
     "react-native-web": "^0.21.0",
     "react-native-webview": "13.16.0",

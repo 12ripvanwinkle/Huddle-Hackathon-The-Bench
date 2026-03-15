@@ -4,43 +4,79 @@ export const generateInviteCode = () => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
-export const createSession = async (sessionName, hostId, radius) => {
+export const createSession = async (sessionName, hostId, radius = 150) => {
   const code = generateInviteCode();
+
   const { data, error } = await supabase
     .from('sessions')
-    .insert({ id: code, name: sessionName, host_id: hostId, radius, active: true })
+    .insert({
+      id: code,
+      name: sessionName,
+      host_id: hostId,
+      radius,
+      active: true,
+    })
     .select()
-    .single();
-  if (error) throw error;
-  await supabase.from('session_members').insert({ session_id: code, user_id: hostId, status: 'safe' });
+    .maybeSingle();
+
+  if (error) {
+    console.log('Session insert error:', error.message, error.code);
+    throw new Error(`Failed to create session: ${error.message}`);
+  }
+
+  if (!data) throw new Error('Session was not created.');
+
+  await supabase
+    .from('session_members')
+    .insert({
+      session_id: code,
+      user_id: hostId,
+      status: 'safe',
+    });
+
   return data;
 };
 
 export const joinSession = async (sessionCode, userId) => {
+  const code = sessionCode.toUpperCase();
+
   const { data: session, error } = await supabase
     .from('sessions')
     .select('*')
-    .eq('id', sessionCode.toUpperCase())
+    .eq('id', code)
     .eq('active', true)
-    .single();
-  if (error || !session) throw new Error('Session not found or already ended.');
-  await supabase.from('session_members').upsert({ session_id: sessionCode.toUpperCase(), user_id: userId, status: 'safe' });
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!session) throw new Error('Session not found or already ended.');
+
+  const { error: joinError } = await supabase
+    .from('session_members')
+    .upsert({
+      session_id: code,
+      user_id: userId,
+      status: 'safe',
+    });
+
+  if (joinError) throw joinError;
   return session;
 };
 
 export const leaveSession = async (sessionId, userId) => {
-  await supabase
+  const { error } = await supabase
     .from('session_members')
     .update({ status: 'left' })
     .eq('session_id', sessionId)
     .eq('user_id', userId);
+  if (error) throw error;
 };
 
 export const endSession = async (sessionId) => {
-  await supabase
+  const { error } = await supabase
     .from('sessions')
     .update({ active: false })
     .eq('id', sessionId);
+  if (error) throw error;
 };
 
 export const subscribeToSession = (sessionId, onUpdate) => {
@@ -48,7 +84,12 @@ export const subscribeToSession = (sessionId, onUpdate) => {
     .channel(`session:${sessionId}`)
     .on(
       'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'session_members', filter: `session_id=eq.${sessionId}` },
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'session_members',
+        filter: `session_id=eq.${sessionId}`,
+      },
       (payload) => onUpdate(payload.new)
     )
     .subscribe();
@@ -57,7 +98,13 @@ export const subscribeToSession = (sessionId, onUpdate) => {
 export const getSessionMembers = async (sessionId) => {
   const { data, error } = await supabase
     .from('session_members')
-    .select(`*, profiles(username, avatar_initials)`)
+    .select(`
+      *,
+      profiles (
+        username,
+        avatar_initials
+      )
+    `)
     .eq('session_id', sessionId)
     .neq('status', 'left');
   if (error) throw error;
@@ -67,4 +114,16 @@ export const getSessionMembers = async (sessionId) => {
 export const formatDistance = (meters) => {
   if (meters >= 1000) return `${(meters / 1000).toFixed(1)}km`;
   return `${Math.round(meters)}m`;
+};
+
+export const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) *
+    Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };

@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     padding: 12, fontSize: 15, marginBottom: 16, color: '#222',
   },
   primaryBtn: {
-    backgroundColor: 'white', borderRadius: 12,
+    backgroundColor: '#fb7854', borderRadius: 12,
     padding: 14, alignItems: 'center', marginBottom: 12,
   },
   primaryBtnText: {

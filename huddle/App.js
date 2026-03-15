@@ -22,6 +22,9 @@ import MapScreen from './screens/MapScreen';     // Screen that displays the GPS
 import FriendsScreen from './screens/FriendsScreen'; // Screen showing friends/group members
 import AuthScreen from './screens/AuthScreen';   // Login / signup screen
 
+import * as Linking from 'expo-linking';
+const prefix = Linking.createURL('/');
+
 
 // FRONTEND NAVIGATION SETUP
 const Tab = createBottomTabNavigator();   // Bottom navigation tabs
@@ -208,7 +211,7 @@ export default function App() {
             <StatusBar style="dark" translucent backgroundColor="transparent" />
 
             {/* FRONTEND APP NAVIGATION ROOT */}
-            <NavigationContainer>
+            <NavigationContainer linking={{ prefixes:[prefix] }}>
 
                 {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
                 <Stack.Navigator screenOptions={{ headerShown: false }}>

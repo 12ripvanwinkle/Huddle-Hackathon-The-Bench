@@ -1,4 +1,4 @@
-import React, { useState }, { useState } from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Modal, Image, Button, TouchableOpacity, Alert, Pressable, ScrollView } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';

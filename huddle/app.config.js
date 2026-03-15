@@ -1,5 +1,6 @@
 export default {
   expo: {
+    scheme: "huddle",
     name: 'Huddle',
     slug: 'huddle',
     version: '1.0.0',

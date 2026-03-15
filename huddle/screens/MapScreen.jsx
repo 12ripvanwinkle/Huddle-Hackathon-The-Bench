@@ -175,28 +175,25 @@ export default function MapScreen({ session }) {
   }, [huddleActive, currentSession]);
   
   // ── DEEP LINK HANDLER ──
+  
   useEffect(() => {
-    // Function to process a URL and show join modal
-    const handleUrl = (url) => {
-      const code = url.split('/').pop(); // take last part of the URL
-      setJoinCodeInput(code);
-      setShowJoinModal(true);
-    };
+  const handleUrl = (url) => {
+    if (!url || !url.includes('/join/')) return; // ← guard clause
+    const code = url.split('/join/').pop();
+    if (!code || code.length < 4) return;        // ← validate code exists
+    setJoinCodeInput(code);
+    setShowJoinModal(true);
+  };
 
-    // Check if app opened from a link (cold start)
-    const getInitialLink = async () => {
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) handleUrl(initialUrl);
-    };
-    getInitialLink();
+  const getInitialLink = async () => {
+    const initialUrl = await Linking.getInitialURL();
+    if (initialUrl) handleUrl(initialUrl); // handleUrl now guards internally
+  };
+  getInitialLink();
 
-    // Listen for links while app is running
-    const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
-
-    // Clean up listener on unmount
-    return () => subscription.remove();
-  }, []);
-
+  const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
+  return () => subscription.remove();
+}, []);
   const loadMembers = async () => {
     if (!currentSession) return;
     try {

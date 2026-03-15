@@ -541,10 +541,6 @@ export default function MapScreen({ session }) {
             <TouchableOpacity style={styles.gearBtn} onPress={() => setShowSessionModal(true)}>
               <Text style={styles.gearIcon}>⚙️</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.gearBtn} onPress={loadMembers}>
-              <Text style={styles.gearIcon}>🔄</Text>
-            </TouchableOpacity>
           </View>
         </View>
       )}

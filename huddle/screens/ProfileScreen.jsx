@@ -3,28 +3,33 @@ import { View, Text, StyleSheet, Modal, Image, Button, TouchableOpacity, Alert, 
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
 import ProfileCard from './ProfileCard';
+import Card from '../screens/Card';
 //import { supabase } from "../services/supabase";
-
-const invitations = () => {
-    return(
-        <Modal>
-            <View style={styles.centeredView}>
-                <View style={styles.modalView}>
-                    <ScrollView>
-                         <Card 
-                                key={friend.id}
-                                name={friend.name} 
-                                description={friend.description} 
-                                imageUrl={friend.imageUrl} 
-                                onButtonPress={() => handleCardAction(friend.id)} 
-                            />
-                    </ScrollView>
-                    <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
-                </View>
-            </View>
-        </Modal>
-    )
-}
+// const friend = {
+//     id: 1,
+//     name: 'John Doe',
+//     description: 'Invited you to join the group "Hiking Buddies"',
+//     imageUrl: 'https://randomuser.me/api/portraits/men}/1.jpg',}
+// const invitations = () => {
+//     return(
+//         <Modal>
+//             <View style={styles.centeredView}>
+//                 <View style={styles.modalView}>
+//                     <ScrollView>
+//                          <Card 
+//                                 key={friend.id}
+//                                 name={friend.name} 
+//                                 description={friend.description} 
+//                                 imageUrl={friend.imageUrl} 
+//                                 onButtonPress={() => handleCardAction(friend.id)} 
+//                             />
+//                     </ScrollView>
+//                     <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
+//                 </View>
+//             </View>
+//         </Modal>
+//     )
+// }
 
 
 const ProfileScreen = () => {
@@ -124,7 +129,7 @@ const ProfileScreen = () => {
                     <View> 
                         <Button 
                         title="Invitations" 
-                        onPress={() => modalVisible(true)} 
+                        onPress={() => setModalVisible(true)} 
                         color="#fb7854" />
                     </View>
 
@@ -135,17 +140,17 @@ const ProfileScreen = () => {
                     <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
 
-                <Modal>
+                <Modal visible={modalVisible}>
                     <View style={styles.centeredView}>
                     <View style={styles.modalView}>
                         <ScrollView>
-                         <Card 
+                         {/* <Card 
                                 key={friend.id}
                                 name={friend.name} 
                                 description={friend.description} 
                                 imageUrl={friend.imageUrl} 
                                 onButtonPress={() => handleCardAction(friend.id)} 
-                            />
+                            /> */}
                         </ScrollView>
                         <Button title="Close" onPress={() => setModalVisible(false)} color="#fb7854" />
                     </View>

@@ -1,9 +1,24 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Image, Button, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 //import { supabase } from "../services/supabase";
 
 const ProfileScreen = () => {
+    const [username, setUsername] = useState("")
+    const [email, setEmail] = useState("")
+    const [avatar_initials, setAvatar_Initials] = useState("")
+    const profile = async () => {
+        const{data: { userData }} = await supabase.auth.getUsers();
+        const {data, error}= await supabase
+            .from('profiles')
+            .select('username,email,avatar_initials')
+        if(error) throw new Error("No Datat Retrieved")
+        if (data){
+            setUsername(data.username)
+            setEmail(data.email)
+            setAvatar_Initials(data.avatar_initials)
+        }
+    }
     return (
         <SafeAreaProvider>
             <View style={styles.ScreenBack}>

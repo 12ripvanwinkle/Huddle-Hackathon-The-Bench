@@ -1,10 +1,7 @@
 import * as Location from 'expo-location';
 import { supabase } from './supabase';
 
-export const requestLocationPermission = async () => {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  return status === 'granted';
-};
+
 
 export const getCurrentLocation = async () => {
   const location = await Location.getCurrentPositionAsync({
@@ -57,31 +54,7 @@ export async function requestLocationPermission() {
 }
 
 
-export async function getCurrentLocation() {
-  const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
-  return {
-    latitude:  location.coords.latitude,
-    longitude: location.coords.longitude,
-  };
-}
 
-// ─────────────────────────────────────────
-// DISTANCE HELPER
-// ─────────────────────────────────────────
-
-export function getDistanceMeters(lat1, lon1, lat2, lon2) {
-  const R    = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a    =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 // ─────────────────────────────────────────
 // GETTERS — READ FROM SUPABASE

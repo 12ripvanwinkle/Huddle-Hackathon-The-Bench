@@ -119,7 +119,7 @@ export default function LocationPicker({
   }, [radius]);
 
   // Use current location
-  const useCurrentLocation = () => {
+  const setCurrentLocation = () => {
     setMode('current');
     if (!userLocation) return;
     const pos = { lat: userLocation.latitude, lng: userLocation.longitude };
@@ -172,7 +172,7 @@ export default function LocationPicker({
             key={opt.key}
             onClick={() => {
               setMode(opt.key);
-              if (opt.key === 'current') useCurrentLocation();
+              if (opt.key === 'current') setCurrentLocation();
             }}
             style={{
               flex: 1,

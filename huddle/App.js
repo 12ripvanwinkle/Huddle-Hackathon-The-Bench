@@ -13,6 +13,7 @@ import { Text, TouchableOpacity, Platform, View, ActivityIndicator } from 'react
 // FRONTEND: Expo UI utilities
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
+import { AppState } from 'react-native';
 
 // BACKEND CONNECTION: Supabase client
 // Supabase acts as the backend for authentication and possibly storing GPS data
@@ -148,10 +149,22 @@ export default function App() {
   useEffect(() => {
     // FRONTEND (Android UI control)
     // Hides the Android navigation bar for immersive full-screen map experience
-    if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden');
-      NavigationBar.setButtonStyleAsync('light');
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active' && Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+        NavigationBar.setButtonStyleAsync('light').catch(() => {});
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Initial setup
+    if (AppState.currentState === 'active' && Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+      NavigationBar.setButtonStyleAsync('light').catch(() => {});
     }
+
+    return () => subscription.remove();
   }, []);
 
   if (loading) {

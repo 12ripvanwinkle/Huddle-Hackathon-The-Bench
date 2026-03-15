@@ -12,7 +12,7 @@ const Card = ({ name, description, imageUrl, onButtonPress }) => {
                 <Text style={styles.cardDescription}>{description}</Text>
             </View>
             <View style={styles.buttonContainer}>
-                <Button title="Action" onPress={onButtonPress} />
+                <Button title="Action" onPress={onButtonPress} color="#fb7854" />
             </View>
         </View>
     )
@@ -20,7 +20,7 @@ const Card = ({ name, description, imageUrl, onButtonPress }) => {
 
 const styles = StyleSheet.create({
     card:{
-        backgroundColor: '#fb7854 ',
+        backgroundColor: '#fb7854',
         borderRadius: 10,
         padding: 16,
         margin: 10,

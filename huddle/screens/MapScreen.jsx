@@ -67,6 +67,25 @@ export default function MapScreen({ session }) {
   // Get current user profile
   const userId = session?.user?.id;
 
+  // real friend fetch
+  const [friends, setFriends] = useState([]) //supabase data for friends list
+  
+  useEffect(() => {
+    fetchFriends()
+  }, [])
+  
+  async function fetchFriends() {
+    const {data, error} = await supabase
+      .from('friends')
+      .select('*')
+  
+    if (error) {
+      console.log("Error fetching friends:", error)
+    } else {
+      setFriends(data)
+    }
+  }
+
   // Fake friends list for invite feature
   const FRIENDS_LIST = [
     { id: 'f1', name: 'Jordan Kim',   initials: 'JK', phone: '+1 555 0101' },

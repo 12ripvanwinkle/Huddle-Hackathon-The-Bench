@@ -42,7 +42,7 @@ const RegisterScreen = () => {
 
       // Show success alert and navigate to login
       Alert.alert('Account created!', 'You can now sign in.', [
-        { text: 'OK', onPress: () => navigation.navigate('Auth') }
+        { text: 'OK', onPress: () => navigation.goBack() }
       ]);
 
       // Clear form

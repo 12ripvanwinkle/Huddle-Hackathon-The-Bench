@@ -25,7 +25,7 @@ export const postSessionAlert = async ({
 };
 
 export const subscribeToSessionAlerts = (sessionId, onInsert) => {
-  return supabase
+  const channel = supabase
     .channel(`session_alerts:${sessionId}`)
     .on(
       'postgres_changes',
@@ -36,7 +36,12 @@ export const subscribeToSessionAlerts = (sessionId, onInsert) => {
         filter: `session_id=eq.${sessionId}`,
       },
       (payload) => onInsert(payload.new)
-    )
-    .subscribe();
-};
+    );
 
+  channel.subscribe((status) => {
+    // Helpful when debugging: SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT
+    console.log('session_alerts channel status:', status);
+  });
+
+  return channel;
+};

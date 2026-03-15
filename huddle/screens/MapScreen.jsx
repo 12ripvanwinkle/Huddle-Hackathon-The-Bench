@@ -88,6 +88,7 @@ export default function MapScreen({ session }) {
   const [remainingMs, setRemainingMs]               = useState(null);
   const [showAlertsLog, setShowAlertsLog]           = useState(false);
   const [alertLog, setAlertLog]                     = useState([]);
+  const [panicSending, setPanicSending]             = useState(false);
   const [showMembersModal, setShowMembersModal]     = useState(false);
   const [currentSession, setCurrentSession]         = useState(null);
   const [sessionName, setSessionName]               = useState('');
@@ -597,6 +598,44 @@ export default function MapScreen({ session }) {
     ]).start(() => setBanner(null));
   };
 
+  const handlePanic = () => {
+    if (panicSending) return;
+    if (!huddleActive || !currentSession?.id || !userId) {
+      Alert.alert('Not in a huddle', 'Join or create a huddle first.');
+      return;
+    }
+
+    Alert.alert(
+      'Panic Button',
+      "This will alert everyone in your current huddle.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Alert',
+          style: 'destructive',
+          onPress: async () => {
+            setPanicSending(true);
+            try {
+              await postSessionAlert({
+                sessionId: currentSession.id,
+                userId,
+                username: myUsername || 'Member',
+                type: 'panic',
+                severity: 'danger',
+                message: 'pressed the panic button. Please check in now.',
+                emoji: '🚨',
+              });
+            } catch (e) {
+              Alert.alert('Failed', e?.message ?? 'Could not send panic alert.');
+            } finally {
+              setPanicSending(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     if (!huddleActive || !currentSession?.id) return;
 
@@ -606,6 +645,7 @@ export default function MapScreen({ session }) {
     }
 
     alertsChannelRef.current = subscribeToSessionAlerts(currentSession.id, (alertRow) => {
+      console.log('session_alerts insert:', alertRow);
       const who = alertRow.username || 'Member';
       const text = `${alertRow.emoji || ''} ${who}: ${alertRow.message}`.trim();
       const type = alertRow.severity === 'danger' ? BANNER_ALERT : BANNER_INFO;
@@ -613,6 +653,35 @@ export default function MapScreen({ session }) {
       showBanner(text, type);
       setAlertLog(prev => [{ time: alertRow.created_at || new Date().toISOString(), message: text }, ...prev].slice(0, 50));
     });
+
+    // Initial read helps confirm RLS/table permissions even if Realtime isn't configured yet.
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('session_alerts')
+          .select('id, username, message, emoji, severity, created_at')
+          .eq('session_id', currentSession.id)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (error) {
+          console.log('session_alerts initial fetch error:', error.message, error.code, error.details);
+          return;
+        }
+
+        if (Array.isArray(data) && data.length > 0) {
+          setAlertLog(
+            data.map((row) => {
+              const who = row.username || 'Member';
+              const text = `${row.emoji || ''} ${who}: ${row.message}`.trim();
+              return { time: row.created_at || new Date().toISOString(), message: text };
+            })
+          );
+        }
+      } catch (e) {
+        console.log('session_alerts initial fetch exception:', e?.message ?? e);
+      }
+    })();
 
     return () => {
       if (alertsChannelRef.current) {
@@ -952,6 +1021,14 @@ export default function MapScreen({ session }) {
               <Text style={styles.inviteBtnText}>➕ Invite Members</Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={[styles.panicBtn, panicSending && styles.panicBtnDisabled]}
+            onPress={handlePanic}
+            disabled={panicSending}
+          >
+            <Text style={styles.panicBtnText}>{panicSending ? 'Sending...' : '🚨 Panic'}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -961,6 +1038,16 @@ export default function MapScreen({ session }) {
           onPress={() => setMenuHidden(false)}
         >
           <Text style={styles.showMenuText}>Menu</Text>
+        </TouchableOpacity>
+      )}
+
+      {huddleActive && menuHidden && (
+        <TouchableOpacity
+          style={[styles.panicFloatingBtn, { top: insets.top + 12 + 54 }]}
+          onPress={handlePanic}
+          disabled={panicSending}
+        >
+          <Text style={styles.panicFloatingText}>{panicSending ? '…' : '🚨'}</Text>
         </TouchableOpacity>
       )}
 
@@ -1392,6 +1479,22 @@ const styles = StyleSheet.create({
   },
   showMenuText: { color: '#222', fontSize: 13, fontWeight: '700' },
 
+  panicFloatingBtn: {
+    position: 'absolute',
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#8B0000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  panicFloatingText: { color: 'white', fontSize: 18, fontWeight: '900' },
+
   // ── Bottom panel ─────────────────────────────────────────
   bottomPanel: {
     position: 'absolute',
@@ -1428,6 +1531,15 @@ const styles = StyleSheet.create({
   membersText:   { color: PURPLE, fontSize: 13, fontWeight: '500' },
   inviteBtn:     { backgroundColor: PURPLE, borderRadius: 10, padding: 12, alignItems: 'center' },
   inviteBtnText: { color: 'white', fontWeight: '600', fontSize: 14 },
+  panicBtn: {
+    marginTop: 10,
+    backgroundColor: '#8B0000',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  panicBtnDisabled: { opacity: 0.85 },
+  panicBtnText: { color: 'white', fontWeight: '800', fontSize: 15 },
 
   // ── FAB & Join button ────────────────────────────────────
   preHuddleActions: {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
     View, Text, StyleSheet, Modal, Image, Button, 
     TouchableOpacity, Alert, Pressable, ScrollView 
@@ -40,6 +40,7 @@ const ProfileScreen = () => {
     const [email, setEmail] = useState("")
     const [avatar_initials, setAvatar_Initials] = useState("")
     const [loggingOut, setLoggingOut] = useState(false);
+    const [profileLoading, setProfileLoading] = useState(true);
     const profile = async () => {
         const { data: { userData } } = await supabase.auth.getUsers();
         const { data, error } = await supabase
@@ -56,6 +57,41 @@ const ProfileScreen = () => {
     // Modal and image picker state
     const [modalVisible, setModalVisible] = useState(false);
     const [profileImage, setProfileImage] = useState('https://ui-avatars.com/api/?name=User&background=fb7854&color=fff');
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadProfile = async () => {
+            setProfileLoading(true);
+            try {
+                const { data: userData, error: userError } = await supabase.auth.getUser();
+                if (userError) throw userError;
+                const user = userData?.user;
+                if (!user) throw new Error("Not signed in");
+
+                const { data: profileRow, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('username, email, avatar_initials, avatar_url')
+                    .eq('id', user.id)
+                    .maybeSingle();
+
+                if (profileError) throw profileError;
+                if (cancelled) return;
+
+                setUsername(profileRow?.username || (user.email || "Member").split('@')[0]);
+                setEmail(profileRow?.email || user.email || "");
+                setAvatar_Initials(profileRow?.avatar_initials || "");
+                if (profileRow?.avatar_url) setProfileImage(profileRow.avatar_url);
+            } catch (e) {
+                console.log('Profile load error:', e?.message ?? e);
+            } finally {
+                if (!cancelled) setProfileLoading(false);
+            }
+        };
+
+        loadProfile();
+        return () => { cancelled = true; };
+    }, []);
 
     // Pick image from library
     const pickImage = async () => {
@@ -140,6 +176,7 @@ const ProfileScreen = () => {
             ]
         );
     };
+
     return (
         <SafeAreaProvider>
             <View style={styles.ScreenBack}>
@@ -156,13 +193,15 @@ const ProfileScreen = () => {
                             <Text style={styles.editText}>Tap to change</Text>
                         </Pressable>
                         <View style={styles.textContainer}>
-                            <Text style={styles.titleText}>User Name</Text>
+                            <Text style={styles.titleText}>
+                                {profileLoading ? "Loading..." : (username || "Member")}
+                            </Text>
                         </View>
                     </View>
 
                     <View style={styles.infoSection}>
-                        <ProfileCard icon="📧" label="Email" value="user@example.com" />
-                        <ProfileCard icon="📱" label="Phone" value="+1 (555) 123-4567" />
+                        <ProfileCard icon="📧" label="Email" value={email || "—"} />
+                        <ProfileCard icon="🆔" label="Initials" value={avatar_initials || "—"} />
                     </View>
 
                     <View>

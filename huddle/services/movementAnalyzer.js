@@ -5,7 +5,7 @@ const DANGER_VELOCITY = 30; // km/h - considered dangerous speed
 const HIGH_SPEED_THRESHOLD = 20; // km/h - fast but not dangerous
 const SPEED_SPIKE_DELTA = 12; // km/h increase between readings
 const SPEED_SPIKE_WINDOW_MS = 5000; // how quickly the increase happens
-const STATIONARY_TIMEOUT = 300000; // 5 minutes in milliseconds
+const STATIONARY_TIMEOUT = 600000; // 10 minutes in milliseconds
 const ALERT_COOLDOWN = 60000; // 1 minute between alerts
 const PROXIMITY_THRESHOLD = 50; // meters - close proximity for meeting detection
 const BOUNDARY_BUFFER = 10; // meters - buffer zone before boundary alert
@@ -31,6 +31,7 @@ export class MovementAnalyzer {
     this.prevLocation = null;
     this.prevTime = null;
     this.stationaryStartTime = null;
+    this.idlenessAlerted = false;
     this.lastAlertTime = 0;
     this.velocityHistory = [];
     this.lastVelocity = null;
@@ -128,7 +129,7 @@ export class MovementAnalyzer {
         this.stationaryStartTime = currentTime;
       }
       const stationaryTime = currentTime - this.stationaryStartTime;
-      if (stationaryTime > STATIONARY_TIMEOUT) {
+      if (stationaryTime > STATIONARY_TIMEOUT && !this.idlenessAlerted) {
         if (riskLevel === "safe") riskLevel = "warning";
         message = `⚠️ Stationary for ${(stationaryTime / 60000).toFixed(0)} minutes`;
         alerts.push({
@@ -137,9 +138,11 @@ export class MovementAnalyzer {
           message: `Stationary for ${(stationaryTime / 60000).toFixed(0)} minutes`,
           emoji: "😐"
         });
+        this.idlenessAlerted = true;
       }
     } else {
       this.stationaryStartTime = null;
+      this.idlenessAlerted = false;
     }
 
     // 3. LEAVING HUDDLE BOUNDARY DETECTION

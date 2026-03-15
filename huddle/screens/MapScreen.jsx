@@ -34,6 +34,8 @@ const WebMap = Platform.OS === 'web'
   ? require('../components/WebMap').default
   : null;
 
+
+
 const PURPLE = '#534AB7';
 const RED = '#E24B4A';
 const GREEN = '#1D9E75';
@@ -66,6 +68,25 @@ export default function MapScreen({ session }) {
 
   // Get current user profile
   const userId = session?.user?.id;
+
+  // real friend fetch
+  const [friends, setFriends] = useState([]) //supabase data for friends list
+  
+  useEffect(() => {
+    fetchFriends()
+  }, [])
+  
+  async function fetchFriends() {
+    const {data, error} = await supabase
+      .from('friends')
+      .select('*')
+  
+    if (error) {
+      console.log("Error fetching friends:", error)
+    } else {
+      setFriends(data)
+    }
+  }
 
   // Fake friends list for invite feature
   const FRIENDS_LIST = [
@@ -427,8 +448,11 @@ export default function MapScreen({ session }) {
   const alertMembers  = members.filter(m => m.status === 'alert');
 
   // ── Render ───────────────────────────────────────────────
-
+  // ADD THIS
+  console.log('Platform:', Platform.OS);
+  console.log('Maps key:', process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
   return (
+    
     <View style={styles.container}>
 
       {/* Map */}

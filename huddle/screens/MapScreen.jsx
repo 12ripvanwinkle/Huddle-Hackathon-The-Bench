@@ -334,18 +334,18 @@ export default function MapScreen({ session }) {
       {/* ── MAP ── */}
       {userLocation ? (
         Platform.OS === 'web' ? (
-          <div style={{ flex: 1, width: '100%', height: '100%' }}>
-            <WebMap
-              userLocation={userLocation}
-              members={members}
-              radius={radius}
-              huddleActive={huddleActive}
-              userId={userId}
-              previewMode={showCreateModal}
-              previewRadius={previewRadius}
-              previewCenter={activePrevCenter}
-            />
-          </div>
+           <View style={{ flex: 1, width: '100%', height: '100%' }}>
+              <WebMap
+                userLocation={userLocation}
+                members={members}
+                radius={radius}
+                huddleActive={huddleActive}
+                userId={userId}
+                previewMode={showCreateModal}
+                previewRadius={previewRadius}
+                previewCenter={activePrevCenter}
+              />
+            </View>
         ) : (
           <MapView
             ref={mapRef}

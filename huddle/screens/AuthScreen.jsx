@@ -141,39 +141,3 @@ const styles = StyleSheet.create({
 
 export default AuthScreen;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1, justifyContent: 'center',
-    padding: 24, backgroundColor: PURPLE,
-  },
-  title: {
-    fontSize: 32, fontWeight: '700',
-    color: 'white', textAlign: 'center', marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16, color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center', marginBottom: 32,
-  },
-  input: {
-    backgroundColor: 'white', borderRadius: 10,
-    padding: 12, fontSize: 15, marginBottom: 16, color: '#222',
-  },
-  primaryBtn: {
-    backgroundColor: '#fb7854', borderRadius: 12,
-    padding: 14, alignItems: 'center', marginBottom: 12,
-  },
-  primaryBtnText: {
-    color: PURPLE, fontWeight: '600', fontSize: 15,
-  },
-  orText: {
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center', marginBottom: 12,
-  },
-  secondaryBtn: {
-    borderWidth: 1, borderColor: 'white',
-    borderRadius: 12, padding: 14, alignItems: 'center',
-  },
-  secondaryBtnText: {
-    color: 'white', fontWeight: '600', fontSize: 15,
-  },
-});

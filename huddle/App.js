@@ -8,15 +8,20 @@ import * as NavigationBar from 'expo-navigation-bar';
 
 import { supabase } from './services/supabase';
 
-// Import your screens
-import MapScreen from './screens/MapScreen';
-import FriendsScreen from './screens/FriendsScreen';
-import AuthScreen from './screens/AuthScreen';
-import RegisterScreen from './screens/RegisterScreen';
+// FRONTEND SCREENS (UI pages)
+import MapScreen from './screens/MapScreen';     // Screen that displays the GPS map
+import FriendsScreen from './screens/FriendsScreen'; // Screen showing friends/group members
+import AuthScreen from './screens/AuthScreen';   // Login / signup screen
 
-const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+import * as Linking from 'expo-linking';
+const prefix = Linking.createURL('/');
 
+
+// FRONTEND NAVIGATION SETUP
+const Tab = createBottomTabNavigator();   // Bottom navigation tabs
+const Stack = createStackNavigator();     // Stack navigation for auth vs main app
+
+// FRONTEND DESIGN CONSTANT
 const PURPLE = '#534AB7';
 
 // Simple back button
@@ -149,7 +154,11 @@ export default function App() {
     return (
         <>
             <StatusBar style="dark" translucent backgroundColor="transparent" />
-            <NavigationContainer>
+
+            {/* FRONTEND APP NAVIGATION ROOT */}
+            <NavigationContainer linking={{ prefixes:[prefix] }}>
+
+                {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
                 <Stack.Navigator screenOptions={{ headerShown: false }}>
                     {session
                         ? <Stack.Screen name="Main">

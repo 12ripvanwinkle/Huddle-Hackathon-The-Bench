@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform
+  Modal, TextInput, Alert, Animated, Share, ScrollView, Platform, Linking
 } from 'react-native';
 import { supabase } from '../services/supabase';
 import {
@@ -61,6 +61,8 @@ export default function MapScreen({ session }) {
   const locationSubscription                        = useRef(null);
   const realtimeSubscription                        = useRef(null);
   const prevAlertCount                              = useRef(0);
+
+  
 
   // Get current user profile
   const userId = session?.user?.id;
@@ -150,6 +152,29 @@ export default function MapScreen({ session }) {
 
     return () => sub.unsubscribe();
   }, [huddleActive, currentSession]);
+  
+  // ── DEEP LINK HANDLER ──
+  useEffect(() => {
+    // Function to process a URL and show join modal
+    const handleUrl = (url) => {
+      const code = url.split('/').pop(); // take last part of the URL
+      setJoinCodeInput(code);
+      setShowJoinModal(true);
+    };
+
+    // Check if app opened from a link (cold start)
+    const getInitialLink = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) handleUrl(initialUrl);
+    };
+    getInitialLink();
+
+    // Listen for links while app is running
+    const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
+
+    // Clean up listener on unmount
+    return () => subscription.remove();
+  }, []);
 
   const loadMembers = async () => {
     if (!currentSession) return;
@@ -670,7 +695,11 @@ export default function MapScreen({ session }) {
             />
             <Text style={styles.modalLabel}>Starting radius: {radius}m</Text>
             <RadiusSlider radius={radius} onChange={setRadius} disabled={false} />
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateHuddle}>
+            <TouchableOpacity 
+              style={[styles.primaryBtn, !sessionName.trim() && styles.primaryBtnDisabled]} 
+              onPress={handleCreateHuddle}
+              disabled={!sessionName.trim()}
+            >
               <Text style={styles.primaryBtnText}>Create & Get Code</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}>

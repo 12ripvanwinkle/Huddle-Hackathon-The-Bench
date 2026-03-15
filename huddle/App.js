@@ -28,11 +28,6 @@ import RegisterScreen from './screens/RegisterScreen';
 import * as Linking from 'expo-linking';
 const prefix = Linking.createURL('/');
 
-
-// FRONTEND NAVIGATION SETUP
-const Tab = createBottomTabNavigator();   // Bottom navigation tabs
-const Stack = createStackNavigator();     // Stack navigation for auth vs main app
-
 // FRONTEND NAVIGATION SETUP
 const Tab = createBottomTabNavigator();   // Bottom navigation tabs
 const Stack = createStackNavigator();     // Stack navigation for auth vs main app

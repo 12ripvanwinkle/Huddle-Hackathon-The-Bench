@@ -22,13 +22,13 @@ const RegisterScreen = () => {
     try {
       setLoading(true);
 
-      // 1️⃣ Validate inputs
+      //  Validate inputs
       if (!email || !password || !confirmPassword || !phone)
         throw new Error('Please fill in all fields.');
       if (password !== confirmPassword)
         throw new Error('Passwords do not match.');
 
-      // 2️⃣ Sign up user with Supabase Auth
+      //  Sign up user with Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -38,20 +38,14 @@ const RegisterScreen = () => {
       });
       if (error) throw error;
 
-      // 3️⃣ Insert user profile into 'profiles' table
-      const{ error: insertError} = await supabase
-      .from('profiles')
-      .insert({
-        email,
-        phone
-      });
+      
 
-      // 4️⃣ Show success alert and navigate to login
-      Alert.alert('Account created! 🎉', 'You can now sign in.', [
+      // Show success alert and navigate to login
+      Alert.alert('Account created!', 'You can now sign in.', [
         { text: 'OK', onPress: () => navigation.navigate('Auth') }
       ]);
 
-      // 5️⃣ Clear form
+      // Clear form
       setEmail('');
       setPassword('');
       setConfirmPassword('');

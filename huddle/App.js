@@ -21,6 +21,7 @@ import { supabase } from './services/supabase';
 // FRONTEND SCREENS (UI pages)
 import MapScreen from './screens/MapScreen';     // Screen that displays the GPS map
 import FriendsScreen from './screens/FriendsScreen'; // Screen showing friends/group members
+import ProfileScreen from './screens/ProfileScreen'; // User profile screen
 import AuthScreen from './screens/AuthScreen';   // Login / signup screen
 import RegisterScreen from './screens/RegisterScreen';
 
@@ -107,39 +108,15 @@ function MainTabs({ session }) {
                 name="Friends"
                 component={FriendsScreen}
                 options={{
+                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text>,
+                }}
+            />
 
-                    // UI icon for friends
-                    tabBarIcon: ({ color }) =>
-                        <Text style={{ fontSize: 20, color }}>👥</Text>,
-
-                    headerShown: true,
-
-                    // UI title
-                    headerTitle: 'Group Members',
-
-                    // HEADER STYLING
-                    headerStyle: { backgroundColor: PURPLE, elevation: 0, shadowOpacity: 0},
-                    headerTintColor: 'white',
-                    headerTitleStyle: { fontWeight: '600', fontSize: 17},
-
-                    // FRONTEND NAVIGATION: back button
-                    headerLeft: ({ canGoBack, navigation}) =>
-                        canGoBack
-                            ? <BackButton onPress={() => navigation.goBack()} />
-                            : null,
-
-                    // BACKEND ACTION
-                    // When user presses sign out, Supabase logs them out
-                    headerRight: () => (
-                        <TouchableOpacity
-                            onPress={() => supabase.auth.signOut()}
-                            style={{ marginRight: 16}}
-                        >
-                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
-                                Sign out
-                            </Text>
-                        </TouchableOpacity>
-                    ),
+            <Tab.Screen
+                name="Profile"
+                component={ProfileScreen}
+                options={{
+                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
                 }}
             />
         </Tab.Navigator>

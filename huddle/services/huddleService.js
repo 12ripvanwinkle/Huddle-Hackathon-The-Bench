@@ -56,6 +56,9 @@ export const joinSession = async (sessionCode, userId) => {
 
   if (error) throw error;
   if (!session) throw new Error('Session not found or already ended.');
+  if (session.expires_at && new Date(session.expires_at).getTime() <= Date.now()) {
+    throw new Error('Session expired.');
+  }
 
   const { error: joinError } = await supabase
     .from('session_members')
@@ -84,6 +87,26 @@ export const endSession = async (sessionId) => {
     .update({ active: false })
     .eq('id', sessionId);
   if (error) throw error;
+};
+
+export const deleteSession = async (sessionId) => {
+  const { error: membersError } = await supabase
+    .from('session_members')
+    .delete()
+    .eq('session_id', sessionId);
+  if (membersError) throw membersError;
+
+  const { error: sessionError } = await supabase
+    .from('sessions')
+    .delete()
+    .eq('id', sessionId);
+  if (sessionError) throw sessionError;
+};
+
+export const endAndDeleteSession = async (sessionId) => {
+  // Mark inactive first so members receive an UPDATE before deletion.
+  await endSession(sessionId);
+  await deleteSession(sessionId);
 };
 
 export const updateSessionRadius = async (sessionId, newRadius) => {

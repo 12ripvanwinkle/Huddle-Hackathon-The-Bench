@@ -6,6 +6,7 @@ import {
 import Slider from '@react-native-community/slider';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../services/supabase';
 import {
   getCurrentLocation,
@@ -15,7 +16,7 @@ import {
   createSession,
   joinSession,
   leaveSession,
-  endSession,
+  endAndDeleteSession,
   updateSessionRadius,
   subscribeToSession,
   getSessionMembers,
@@ -77,6 +78,7 @@ const formatCountdown = (ms) => {
 };
 
 export default function MapScreen({ session }) {
+  const insets = useSafeAreaInsets();
   const [userLocation, setUserLocation]             = useState(null);
   const [huddleActive, setHuddleActive]             = useState(false);
   const [isHost, setIsHost]                         = useState(false);
@@ -97,6 +99,7 @@ export default function MapScreen({ session }) {
   const [selectedFriends, setSelectedFriends]       = useState([]);
   const [inviteSearch, setInviteSearch]             = useState('');
   const [banner, setBanner]                         = useState(null);
+  const [menuHidden, setMenuHidden]                 = useState(false);
 
   // Preview state
   const [previewRadius, setPreviewRadius]           = useState(150);
@@ -108,6 +111,7 @@ export default function MapScreen({ session }) {
   const uiLocationSubscription = useRef(null);
   const realtimeSubscription = useRef(null);
   const prevAlertCount       = useRef(0);
+  const prevAlertedIdsRef    = useRef(new Set());
   const mapRef               = useRef(null);
   const movementAnalyzer     = useRef(null);
 
@@ -119,6 +123,12 @@ export default function MapScreen({ session }) {
   const broadcastContextRef = useRef(null);
   const broadcastInFlightRef = useRef(false);
   const lastBroadcastAtRef = useRef(0);
+  const expirationHandledRef = useRef(false);
+  const huddleActiveRef = useRef(false);
+
+  useEffect(() => {
+    huddleActiveRef.current = huddleActive;
+  }, [huddleActive]);
 
   const FRIENDS_LIST = [
     { id: 'f1', name: 'Jordan Kim',   initials: 'JK', phone: '+1 555 0101' },
@@ -177,7 +187,7 @@ export default function MapScreen({ session }) {
         {
           accuracy: Location.Accuracy.High,
           timeInterval: 2000,
-          distanceInterval: 2,
+          distanceInterval: 0,
         },
         (location) => {
           const { latitude, longitude } = location.coords || {};
@@ -186,6 +196,7 @@ export default function MapScreen({ session }) {
 
           const ctx = broadcastContextRef.current;
           if (!ctx) return;
+          if (!huddleActiveRef.current) return;
 
           const now = Date.now();
           if (broadcastInFlightRef.current) return;
@@ -199,46 +210,60 @@ export default function MapScreen({ session }) {
               ? 'alert'
               : 'safe';
 
-          // Analyze movement and generate alerts
-          if (movementAnalyzer.current) {
-            const movementData = movementAnalyzer.current.analyzeMovement(
-              { latitude, longitude },
-              members // Pass all members for proximity detection
+          const updatePromise = supabase
+            .from('session_members')
+            .upsert(
+              {
+                session_id: ctx.sessionId,
+                user_id: ctx.userId,
+                latitude,
+                longitude,
+                status,
+                last_updated: new Date().toISOString(),
+              },
+              { onConflict: 'session_id,user_id' }
             );
 
-            // Process alerts
-            if (movementData.alerts && movementData.alerts.length > 0) {
-              movementData.alerts.forEach(async (alert) => {
-                // Add to alert log
-                const alertMessage = `${alert.emoji} ${alert.message}`;
-                showBanner(alertMessage, alert.severity === 'danger' ? BANNER_ALERT : BANNER_INFO);
-                setAlertLog(prev => [{ time: new Date().toISOString(), message: alertMessage }, ...prev].slice(0, 50));
+          // Analyze movement and generate alerts (never block location writes)
+          try {
+            if (movementAnalyzer.current) {
+              const movementData = movementAnalyzer.current.analyzeMovement(
+                { latitude, longitude },
+                members // Pass all members for proximity detection
+              );
 
-                // Generate AI-powered alert if available
-                try {
-                  const aiAlert = await movementAnalyzer.current.generateAlert(
-                    { name: myInitials, email: session?.user?.email },
-                    { ...movementData, latitude, longitude },
-                    alert.type
-                  );
-                  if (aiAlert) {
-                    // Could send to group chat here
-                    console.log('AI Alert:', aiAlert);
+              // Process alerts
+              if (movementData.alerts && movementData.alerts.length > 0) {
+                movementData.alerts.forEach(async (alert) => {
+                  // Add to alert log
+                  const alertMessage = `${alert.emoji} ${alert.message}`;
+                  showBanner(alertMessage, alert.severity === 'danger' ? BANNER_ALERT : BANNER_INFO);
+                  setAlertLog(prev => [{ time: new Date().toISOString(), message: alertMessage }, ...prev].slice(0, 50));
+
+                  // Generate AI-powered alert if available
+                  try {
+                    const aiAlert = await movementAnalyzer.current.generateAlert(
+                      { name: myInitials, email: session?.user?.email },
+                      { ...movementData, latitude, longitude },
+                      alert.type
+                    );
+                    if (aiAlert) {
+                      // Could send to group chat here
+                      console.log('AI Alert:', aiAlert);
+                    }
+                  } catch (e) {
+                    console.log('Alert generation error:', e.message);
                   }
-                } catch (e) {
-                  console.log('Alert generation error:', e.message);
-                }
-              });
+                });
+              }
             }
+          } catch (e) {
+            console.log('Movement analyzer error:', e?.message ?? e);
           }
 
-          supabase
-            .from('session_members')
-            .update({ latitude, longitude, status, last_updated: new Date().toISOString() })
-            .eq('session_id', ctx.sessionId)
-            .eq('user_id', ctx.userId)
+          updatePromise
             .then(({ error }) => {
-              if (error) console.log('Location update error:', error.message);
+              if (error) console.log('Location update error:', error.message, error.code, error.details);
             })
             .finally(() => {
               broadcastInFlightRef.current = false;
@@ -308,6 +333,33 @@ export default function MapScreen({ session }) {
       centerLng,
     };
 
+    // Push once immediately so Supabase has a location even if the user stands still.
+    if (typeof userLocation?.latitude === 'number' && typeof userLocation?.longitude === 'number') {
+      const { latitude, longitude } = userLocation;
+      const status =
+        getDistanceMeters(centerLat, centerLng, latitude, longitude) > sessionRadius
+          ? 'alert'
+          : 'safe';
+
+      lastBroadcastAtRef.current = 0;
+      supabase
+        .from('session_members')
+        .upsert(
+          {
+            session_id: currentSession.id,
+            user_id: userId,
+            latitude,
+            longitude,
+            status,
+            last_updated: new Date().toISOString(),
+          },
+          { onConflict: 'session_id,user_id' }
+        )
+        .then(({ error }) => {
+          if (error) console.log('Initial location update error:', error.message, error.code, error.details);
+        });
+    }
+
     // Initialize or update movement analyzer for this session
     if (movementAnalyzer.current) {
       movementAnalyzer.current.updateSession(centerLat, centerLng, sessionRadius);
@@ -353,6 +405,22 @@ export default function MapScreen({ session }) {
       },
       // Session updates (for radius changes / expiration)
       (updatedSession) => {
+        if (updatedSession.active === false) {
+          broadcastContextRef.current = null;
+          broadcastInFlightRef.current = false;
+          lastBroadcastAtRef.current = 0;
+          movementAnalyzer.current = null;
+          setShowSessionModal(false);
+          setHuddleActive(false);
+          setIsHost(false);
+          setCurrentSession(null);
+          setSessionName('');
+          setRemainingMs(null);
+          setMembers([]);
+          prevAlertCount.current = 0;
+          Alert.alert('Huddle ended', 'The host ended this huddle.');
+          return;
+        }
         if (updatedSession.radius !== radius) {
           setRadius(updatedSession.radius);
         }
@@ -370,16 +438,23 @@ export default function MapScreen({ session }) {
     if (!huddleActive) return;
 
     const alertMembers = members.filter(m => m.status === 'alert' && m.user_id !== userId);
-    if (alertMembers.length > prevAlertCount.current) {
-      const names = alertMembers.map(m => m.profiles?.username || 'Someone').join(', ');
+    const currentAlertedIds = new Set(alertMembers.map(m => m.user_id));
+    const newlyAlerted = alertMembers.filter(m => !prevAlertedIdsRef.current.has(m.user_id));
+    if (newlyAlerted.length > 0) {
+      const names = newlyAlerted.map(m => m.profiles?.username || m.username || 'Member').join(', ');
       const message = `⚠️ ${names} left the huddle zone`;
 
       showBanner(message, BANNER_ALERT);
       setAlertLog(prev => [{ time: new Date().toISOString(), message }, ...prev].slice(0, 50));
     }
 
+    prevAlertedIdsRef.current = currentAlertedIds;
     prevAlertCount.current = alertMembers.length;
   }, [members, huddleActive, userId]);
+
+  useEffect(() => {
+    expirationHandledRef.current = false;
+  }, [currentSession?.id]);
 
   // ── Countdown timer ──────────────────────────────────────
   useEffect(() => {
@@ -398,6 +473,39 @@ export default function MapScreen({ session }) {
     const interval = setInterval(updateRemaining, 1000);
     return () => clearInterval(interval);
   }, [huddleActive, currentSession?.expires_at]);
+
+  useEffect(() => {
+    if (!huddleActive) return;
+    if (!currentSession?.id) return;
+    if (remainingMs === null || remainingMs > 0) return;
+    if (expirationHandledRef.current) return;
+
+    expirationHandledRef.current = true;
+
+    (async () => {
+      try {
+        if (isHost) {
+          await endAndDeleteSession(currentSession.id);
+        }
+      } catch (e) {
+        console.log('Expiration cleanup error:', e?.message ?? e);
+      } finally {
+        broadcastContextRef.current = null;
+        broadcastInFlightRef.current = false;
+        lastBroadcastAtRef.current = 0;
+        movementAnalyzer.current = null;
+        setShowSessionModal(false);
+        setHuddleActive(false);
+        setIsHost(false);
+        setCurrentSession(null);
+        setSessionName('');
+        setRemainingMs(null);
+        setMembers([]);
+        prevAlertCount.current = 0;
+        Alert.alert('Huddle expired', 'This huddle has expired.');
+      }
+    })();
+  }, [huddleActive, currentSession?.id, remainingMs, isHost]);
   
   // ── DEEP LINK HANDLER ──
   
@@ -523,6 +631,10 @@ export default function MapScreen({ session }) {
           try {
             await leaveSession(currentSession.id, userId);
             if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
+            broadcastContextRef.current = null;
+            broadcastInFlightRef.current = false;
+            lastBroadcastAtRef.current = 0;
+            movementAnalyzer.current = null;
             setShowSessionModal(false);
             setHuddleActive(false);
             setIsHost(false);
@@ -544,8 +656,12 @@ export default function MapScreen({ session }) {
         text: 'End for Everyone', style: 'destructive',
         onPress: async () => {
           try {
-            await endSession(currentSession.id);
+            await endAndDeleteSession(currentSession.id);
             if (realtimeSubscription.current) realtimeSubscription.current.unsubscribe();
+            broadcastContextRef.current = null;
+            broadcastInFlightRef.current = false;
+            lastBroadcastAtRef.current = 0;
+            movementAnalyzer.current = null;
             setShowSessionModal(false);
             setHuddleActive(false);
             setIsHost(false);
@@ -709,6 +825,7 @@ export default function MapScreen({ session }) {
         <Animated.View style={[
           styles.banner,
           banner.type === BANNER_ALERT ? styles.bannerAlert : styles.bannerInfo,
+          { top: insets.top + (huddleActive && !menuHidden ? 84 : 16) },
           { opacity: bannerOpacity }
         ]}>
           <Text style={[
@@ -721,8 +838,8 @@ export default function MapScreen({ session }) {
       )}
 
       {/* Top bar */}
-      {huddleActive && (
-        <View style={styles.topBar}>
+      {huddleActive && !menuHidden && (
+        <View style={[styles.topBar, { top: insets.top + 12 }]}>
           <View>
             <Text style={styles.topBarTitle}>{sessionName || currentSession?.name || 'Huddle Session'}</Text>
             <Text style={styles.hostBadge}>{isHost ? '👑 Host' : '👤 Member'}</Text>
@@ -731,6 +848,9 @@ export default function MapScreen({ session }) {
             )}
           </View>
           <View style={styles.topBarRight}>
+            <TouchableOpacity style={styles.hideMenuBtn} onPress={() => setMenuHidden(true)}>
+              <Text style={styles.hideMenuText}>Hide</Text>
+            </TouchableOpacity>
             <View style={styles.inviteChip}>
               <Text style={styles.inviteChipText}>📋 {currentSession?.id}</Text>
             </View>
@@ -742,7 +862,7 @@ export default function MapScreen({ session }) {
       )}
 
       {/* Bottom panel */}
-      {huddleActive && (
+      {huddleActive && !menuHidden && (
         <View style={styles.bottomPanel}>
           <RadiusSlider radius={radius} onChange={handleRadiusChange} disabled={!isHost} />
           <View style={styles.bottomRow}>
@@ -763,6 +883,15 @@ export default function MapScreen({ session }) {
             </TouchableOpacity>
           )}
         </View>
+      )}
+
+      {huddleActive && menuHidden && (
+        <TouchableOpacity
+          style={[styles.showMenuBtn, { top: insets.top + 12 }]}
+          onPress={() => setMenuHidden(false)}
+        >
+          <Text style={styles.showMenuText}>Menu</Text>
+        </TouchableOpacity>
       )}
 
       {/* Alert log modal */}
@@ -1128,7 +1257,7 @@ const styles = StyleSheet.create({
   // ── Alert banner ─────────────────────────────────────────
   banner: {
     position: 'absolute',
-    top: 120, left: 16, right: 16,
+    left: 16, right: 16,
     borderRadius: 10,
     padding: 12,
     borderWidth: 0.5,
@@ -1142,7 +1271,7 @@ const styles = StyleSheet.create({
   // ── Top bar ──────────────────────────────────────────────
   topBar: {
     position: 'absolute',
-    top: 60, left: 16, right: 16,
+    left: 16, right: 16,
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 12,
@@ -1167,6 +1296,31 @@ const styles = StyleSheet.create({
   inviteChipText: { color: PURPLE, fontSize: 13, fontWeight: '500' },
   gearBtn:  { padding: 4 },
   gearIcon: { fontSize: 20 },
+  hideMenuBtn: {
+    borderWidth: 0.5,
+    borderColor: '#EEE',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'white',
+  },
+  hideMenuText: { fontSize: 12, color: '#444', fontWeight: '600' },
+
+  showMenuBtn: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 0.5,
+    borderColor: '#EEE',
+  },
+  showMenuText: { color: '#222', fontSize: 13, fontWeight: '700' },
 
   // ── Bottom panel ─────────────────────────────────────────
   bottomPanel: {

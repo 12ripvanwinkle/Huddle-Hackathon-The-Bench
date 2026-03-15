@@ -3,6 +3,8 @@
 // Movement thresholds
 const DANGER_VELOCITY = 30; // km/h - considered dangerous speed
 const HIGH_SPEED_THRESHOLD = 20; // km/h - fast but not dangerous
+const SPEED_SPIKE_DELTA = 12; // km/h increase between readings
+const SPEED_SPIKE_WINDOW_MS = 5000; // how quickly the increase happens
 const STATIONARY_TIMEOUT = 300000; // 5 minutes in milliseconds
 const ALERT_COOLDOWN = 60000; // 1 minute between alerts
 const PROXIMITY_THRESHOLD = 50; // meters - close proximity for meeting detection
@@ -31,6 +33,7 @@ export class MovementAnalyzer {
     this.stationaryStartTime = null;
     this.lastAlertTime = 0;
     this.velocityHistory = [];
+    this.lastVelocity = null;
     this.boundaryCrossed = false; // Track if user has left boundary
     this.lastProximityCheck = 0;
     this.proximityCooldown = 30000; // 30 seconds between proximity alerts
@@ -48,7 +51,8 @@ export class MovementAnalyzer {
   calculateVelocity(prevLoc, currLoc, timeDeltaMs) {
     if (!prevLoc || !currLoc) return 0;
 
-    const distanceKm = getDistanceMeters(prevLoc.latitude, prevLoc.longitude, currLoc.latitude, currLoc.longitude);
+    const distanceKm =
+      getDistanceMeters(prevLoc.latitude, prevLoc.longitude, currLoc.latitude, currLoc.longitude) / 1000;
     const timeHours = timeDeltaMs / (1000 * 60 * 60);
     return timeHours > 0 ? distanceKm / timeHours : 0;
   }
@@ -83,6 +87,8 @@ export class MovementAnalyzer {
 
     const timeDelta = currentTime - this.prevTime;
     const velocity = this.calculateVelocity(this.prevLocation, currentLocation, timeDelta);
+    const deltaV = this.lastVelocity == null ? 0 : (velocity - this.lastVelocity);
+    const suddenSpeedIncrease = deltaV >= SPEED_SPIKE_DELTA && timeDelta <= SPEED_SPIKE_WINDOW_MS;
 
     // Update velocity history
     this.velocityHistory.push({ velocity, time: currentTime });
@@ -94,21 +100,21 @@ export class MovementAnalyzer {
     let riskLevel = "safe";
     let message = "Normal movement";
 
-    // 1. HIGH SPEED DETECTION
-    if (velocity > DANGER_VELOCITY) {
+    // 1. HIGH SPEED DETECTION (only alert on spikes)
+    if (velocity > DANGER_VELOCITY && (suddenSpeedIncrease || (this.lastVelocity != null && this.lastVelocity <= DANGER_VELOCITY))) {
       riskLevel = "danger";
       message = `🚨 DANGER: Moving at ${velocity.toFixed(1)} km/h!`;
       alerts.push({
-        type: "high_speed",
+        type: "speed_spike",
         severity: "danger",
         message: `High speed: ${velocity.toFixed(1)} km/h`,
         emoji: "🚨"
       });
-    } else if (velocity > HIGH_SPEED_THRESHOLD) {
+    } else if (velocity > HIGH_SPEED_THRESHOLD && suddenSpeedIncrease) {
       if (riskLevel === "safe") riskLevel = "warning";
       message = `Fast movement: ${velocity.toFixed(1)} km/h`;
       alerts.push({
-        type: "high_speed",
+        type: "speed_spike",
         severity: "warning",
         message: `Moving fast: ${velocity.toFixed(1)} km/h`,
         emoji: "💨"
@@ -185,6 +191,7 @@ export class MovementAnalyzer {
 
     this.prevLocation = currentLocation;
     this.prevTime = currentTime;
+    this.lastVelocity = velocity;
 
     return {
       velocity: parseFloat(velocity.toFixed(2)),
@@ -217,6 +224,9 @@ export class MovementAnalyzer {
 
       let contextPrompt = "";
       switch (alertType) {
+        case "speed_spike":
+          contextPrompt = `User had a sudden increase in speed and is now at ${movementData.velocity} km/h. Generate an urgent safety alert.`;
+          break;
         case "high_speed":
           contextPrompt = `User is moving dangerously fast at ${movementData.velocity} km/h. Generate an urgent safety alert.`;
           break;

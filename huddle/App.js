@@ -13,6 +13,7 @@ import { Text, TouchableOpacity, Platform, View, ActivityIndicator } from 'react
 // FRONTEND: Expo UI utilities
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppState } from 'react-native';
 
 // BACKEND CONNECTION: Supabase client
@@ -183,31 +184,33 @@ export default function App() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
       {/* FRONTEND APP NAVIGATION ROOT */}
-      <NavigationContainer linking={linking}>
+      <SafeAreaProvider>
+        <NavigationContainer linking={linking}>
 
-        {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {/* STACK NAVIGATION CONTROLS AUTH FLOW */}
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
 
-          {/* AUTH LOGIC */}
-          {/* If user is logged in → show main app (map + friends) */}
-          {/* If user not logged in → show login screen */}
+            {/* AUTH LOGIC */}
+            {/* If user is logged in → show main app (map + friends) */}
+            {/* If user not logged in → show login screen */}
 
-          {session ? (
-            // User is logged in → Main app
-            <Stack.Screen name="Main">
-              {() => <MainTabs session={session} />}
-            </Stack.Screen>
-          ) : (
-            // No session → show auth screens
-            <>
-              <Stack.Screen name="Auth" component={AuthScreen} />
-              <Stack.Screen name="Register" component={RegisterScreen} />
-            </>
-          )}
+            {session ? (
+              // User is logged in → Main app
+              <Stack.Screen name="Main">
+                {() => <MainTabs session={session} />}
+              </Stack.Screen>
+            ) : (
+              // No session → show auth screens
+              <>
+                <Stack.Screen name="Auth" component={AuthScreen} />
+                <Stack.Screen name="Register" component={RegisterScreen} />
+              </>
+            )}
 
-        </Stack.Navigator>
+          </Stack.Navigator>
 
-      </NavigationContainer>
+        </NavigationContainer>
+      </SafeAreaProvider>
     </>
   );
 }
